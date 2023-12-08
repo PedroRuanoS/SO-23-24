@@ -15,7 +15,7 @@
 
 int is_job_file(const char *filename) {
   const char *dot = strrchr(filename, '.');
-  return dot && !strcmp(dot, ".job");
+  return dot && !strcmp(dot, ".jobs");
 }
 
 int main(int argc, char *argv[]) {
