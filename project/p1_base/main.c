@@ -61,7 +61,8 @@ int main(int argc, char *argv[]) {
       }
 
       char out_file_path[PATH_MAX];
-      snprintf(out_file_path, PATH_MAX, "%s/%s.out", argv[1], entry->d_name);
+      snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
+        (int)(strlen(entry->d_name) - 5), entry->d_name);
       int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
       if (fd_out < 0) {
         perror("Error opening out file");
