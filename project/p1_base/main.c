@@ -13,23 +13,29 @@
 #include "operations.h"
 #include "parser.h"
 
+int is_job_file(const char *filename) {
+  const char *dot = strrchr(filename, '.');
+  return dot && !strcmp(dot, ".job");
+}
+
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
 
-  if (argc < 2) // no directory argument specified
+  if (argc < 2) {
+    fprintf(stderr, "Usage: %s <directory_path>\n", argv[0]);
     return 1;
+  }
 
   if (argc > 2) {
     char *endptr;
     unsigned long int delay = strtoul(argv[2], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
-      fprintf(stderr, "Invalid delay value or value too large\n");
+      fprintf(stderr, "Invalid delay value\n");
       return 1;
     }
 
     state_access_delay_ms = (unsigned int)delay;
-
   }
 
   if (ems_init(state_access_delay_ms)) {
@@ -37,135 +43,103 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  const char *dir_path = argv[1];
-  size_t dir_path_len = strlen(dir_path);
-  DIR *target_dir = opendir(dir_path);
-  
+  DIR *target_dir = opendir(argv[1]);
   if (target_dir == NULL) {
-    fprintf(stderr, "Failed to open the directory\n");
+    perror("Failed to open directory");
     return 1;
   }
 
   struct dirent *entry;
-  char *file_path;
-
   while ((entry = readdir(target_dir)) != NULL) {
-    unsigned int event_id, delay;
-    size_t num_rows, num_columns, num_coords;
-    size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-    enum Command cmd = 0;
-
-    // Exclude "." and ".." entries
-    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+    if (is_job_file(entry->d_name)) {
+      char job_file_path[PATH_MAX];
+      snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
+      int fd_job = open(job_file_path, O_RDONLY);
+      if (fd_job < 0) {
+        perror("Error opening job file");
         continue;
-    }
-    // allocate space for the file path including the extra slash
-    file_path = (char*)malloc(sizeof(char)*(dir_path_len + strlen(entry->d_name) + 2));
+      }
+
+      char out_file_path[PATH_MAX];
+      snprintf(out_file_path, PATH_MAX, "%s/%s.out", argv[1], entry->d_name);
+      int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+      if (fd_out < 0) {
+        perror("Error opening out file");
+        close(fd_job);
+        continue;
+      }
+
+      enum Command cmd;
+      while ((cmd = get_next(fd_job)) != EOC) {
+        unsigned int event_id, delay;
+        size_t num_rows, num_columns, num_coords;
+        size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+        switch (cmd) {
+        case CMD_CREATE: 
+          if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+
+          if (ems_create(event_id, num_rows, num_columns)) {
+            fprintf(stderr, "Failed to create event\n");
+          }
+
+          break;
     
-    if (file_path == NULL) {
-        fprintf(stderr, "Memory allocation failed\n");
-        return 1;
-    }
+        case CMD_RESERVE: 
+          num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
-    // Copy the directory path to file_path
-    strcpy(file_path, dir_path);    
-    strcat(file_path, "/");
-    // Concatenate the file name onto file_path
-    strcat(file_path, entry->d_name);
+          if (num_coords == 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
 
-    printf("%s\n", file_path); // REMOVER, PRINT PARA TESTAR
+          if (ems_reserve(event_id, num_coords, xs, ys)) {
+            fprintf(stderr, "Failed to reserve seats\n");
+          }
 
-    int fd_jobs = open(file_path, O_RDONLY); //file_path não é const char*, causa problemas?
+          break;
+        
+        case CMD_SHOW: 
+          if (parse_show(fd_job, &event_id) != 0) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
 
-    if (fd_jobs < 0) {
-      fprintf(stderr, "Error opening file\n");
-      return 1;
-    }
+          if (ems_show(event_id, fd_out)) {
+            fprintf(stderr, "Failed to show event\n");
+          }
 
-    // Find the position of the dot in the original file name
-    //const char *dotPosition = strrchr(file_path, '.');
-    // Calculate the length of the prefix (characters before the dot)
-    // size_t prefixLength = (size_t) (dotPosition - file_path); //cast manhoso?
-    // char *output_file_path = "";
-    // strncpy(output_file_path, file_path, prefixLength);
-    // strcat(output_file_path, ".out");
+          break;
+        
 
-    // int fd_out = open(output_file_path, O_CREAT | O_TRUNC | O_WRONLY , S_IRUSR | S_IWUSR);
+        case CMD_LIST_EVENTS: 
+          if (ems_list_events()) {
+            fprintf(stderr, "Failed to list events\n");
+          }
 
-    // if (fd_out < 0) {
-    //   fprintf(stderr, "Error opening file\n");
-    //   return 1;
-    // }
+          break;
+        
+        case CMD_WAIT: 
+          if (parse_wait(fd_job, &delay, NULL) == -1) {
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            continue;
+          }
+            
+          if (delay > 0) {
+            printf("Waiting...\n");
+            ems_wait(delay);
+          }
 
-    printf("> ");
-    fflush(stdout);
-
-    while (cmd != EOC) {
-      switch (cmd = get_next(fd_jobs)) {
-      case CMD_CREATE:
-        if (parse_create(fd_jobs, &event_id, &num_rows, &num_columns) != 0) {
+          break;
+        
+        case CMD_INVALID:
           fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
+          break;
 
-        if (ems_create(event_id, num_rows, num_columns)) {
-          fprintf(stderr, "Failed to create event\n");
-        }
-
-        break;
-
-      case CMD_RESERVE:
-        num_coords = parse_reserve(fd_jobs, MAX_RESERVATION_SIZE, &event_id, xs, ys);
-
-        if (num_coords == 0) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (ems_reserve(event_id, num_coords, xs, ys)) {
-          fprintf(stderr, "Failed to reserve seats\n");
-        }
-
-        break;
-
-      case CMD_SHOW:
-        if (parse_show(fd_jobs, &event_id) != 0) {
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (ems_show(event_id)) {
-          fprintf(stderr, "Failed to show event\n");
-        }
-
-        break;
-
-      case CMD_LIST_EVENTS:
-        if (ems_list_events()) {
-          fprintf(stderr, "Failed to list events\n");
-        }
-
-        break;
-
-      case CMD_WAIT:
-        if (parse_wait(fd_jobs, &delay, NULL) == -1) {  // thread_id is not implemented
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          continue;
-        }
-
-        if (delay > 0) {
-          printf("Waiting...\n");
-          ems_wait(delay);
-        }
-
-        break;
-
-      case CMD_INVALID:
-        fprintf(stderr, "Invalid command. See HELP for usage\n");
-        break;
-
-      case CMD_HELP:
-        printf(
+        case CMD_HELP:
+          printf(
             "Available commands:\n"
             "  CREATE <event_id> <num_rows> <num_columns>\n"
             "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
@@ -175,22 +149,24 @@ int main(int argc, char *argv[]) {
             "  BARRIER\n"                      // Not implemented
             "  HELP\n");
 
-        break;
+          break;
 
-      case CMD_BARRIER:  // Not implemented
-      case CMD_EMPTY:
-        break;
+        case CMD_BARRIER:
+        case CMD_EMPTY:
+          break;
+        
+        case EOC:
+          break;
+        } 
+      }
 
-      case EOC:
-        break; //continue?
-      }      
+      close(fd_job);
+      close(fd_out);
+          
     }
-    close(fd_jobs); //if close != 0 error closing
-      
-    //close(fd_out);
-    free(file_path);    
-  }
-  //ems_terminate();
+  }  
   closedir(target_dir);
+  ems_terminate();
   return 0;
+  
 }
