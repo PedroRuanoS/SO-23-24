@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <time.h>
 
 #include "eventlist.h"
+#include "constants.h"
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
@@ -172,34 +174,59 @@ int ems_show(unsigned int event_id, int fd) { //aceitar parametro fd
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      dprintf(fd,"%u", *seat);
+      char buffer[UINT_MAX_DIGITS + 1];
+      size_t len = (size_t)snprintf(buffer, sizeof(buffer), "%u", *seat);
 
-      if (j < event->cols) {
-        dprintf(fd, " ");
+      if (write(fd, buffer, len) < 0) {
+        perror("Error writing to file"); //mudar fprintf
+        return 1;
       }
+      if (j < event->cols) {
+        if (write(fd, " ", 1) < 0) {
+          perror("Error writing to file");
+          return 1;
+        }
+      }    
     }
-
-    dprintf(fd, "\n");
+    if (write(fd, "\n", 1) < 0) {
+      perror("Error writing to file");
+      return 1;
+    }
   }
-
   return 0;
 }
 
-int ems_list_events() {
+int ems_list_events(int fd) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
   if (event_list->head == NULL) {
-    printf("No events\n");
+    if (write(fd, "No events\n", 11) < 0) {
+      perror("Error writing to file"); //mudar fprintf
+      return 1;
+    }
     return 0;
   }
 
   struct ListNode* current = event_list->head;
   while (current != NULL) {
-    printf("Event: ");
-    printf("%u\n", (current->event)->id);
+    if (write(fd, "Event: ", 8) < 0) {
+      perror("Error writing to file"); //mudar fprintf
+      return 1;
+    }
+    if (write(fd, "Event: ", 8) < 0) {
+      perror("Error writing to file"); //mudar fprintf
+      return 1;
+    }
+    char buffer[UINT_MAX_DIGITS + 1];
+    size_t len = (size_t)snprintf(buffer, sizeof(buffer), "%u\n", (current->event)->id);
+
+    if (write(fd, buffer, len) < 0) {
+      perror("Error writing to file"); //mudar fprintf
+      return 1;
+    }
     current = current->next;
   }
 

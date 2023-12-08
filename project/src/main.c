@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     unsigned long int delay = strtoul(argv[2], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
-      fprintf(stderr, "Invalid delay value\n");
+      fprintf(stderr, "Invalid delay value or value too large\n");
       return 1;
     }
 
@@ -63,7 +63,7 @@ int main(int argc, char *argv[]) {
       char out_file_path[PATH_MAX];
       snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
         (int)(strlen(entry->d_name) - 5), entry->d_name);
-      int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, 0644);
+      int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
       if (fd_out < 0) {
         perror("Error opening out file");
         close(fd_job);
@@ -116,7 +116,7 @@ int main(int argc, char *argv[]) {
         
 
         case CMD_LIST_EVENTS: 
-          if (ems_list_events()) {
+          if (ems_list_events(fd_out)) {
             fprintf(stderr, "Failed to list events\n");
           }
 
