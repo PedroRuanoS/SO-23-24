@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,6 +29,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Usage: %s <directory_path> <MAX_PROC> <MAX_THREADS>\n", argv[0]);
     return 1;
   }
+
   if (argc > 3/*4*/) {
     char *endptr;
     unsigned long int delay = strtoul(argv[3/*4*/], &endptr, 10);
@@ -63,11 +65,34 @@ int main(int argc, char *argv[]) {
 
   struct dirent *entry;
   while ((entry = readdir(target_dir)) != NULL) {
-    if (is_job_file(entry->d_name)) {
+    if (num_children == (size_t) max_proc) {
+      int status;
+      pid_t terminated_pid = wait(&status);
+      if (terminated_pid == -1) {
+        perror("Error waiting for child process");
+      } else {
+        if (WIFEXITED(status)) {
+          printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+          printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
+        } else {
+          printf("Process %d terminated abnormally\n", terminated_pid);
+        }
+      }
+      for (size_t i = 0; i < num_children; i++) {
+        if (child_pids[i] == terminated_pid) {
+          child_pids[i]= child_pids[num_children - 1];
+          num_children--;
+          break;
+        }
+      }
+    }
+    if (is_job_file(entry->d_name)) {    
       pid_t pid = fork();
       if (pid == -1) {
         perror("Error in fork");
         return 1;
+
       } else if (pid == 0) {
         char job_file_path[PATH_MAX];
         snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
@@ -181,32 +206,14 @@ int main(int argc, char *argv[]) {
         close(fd_job);
         close(fd_out);
         exit(0);
+
       } else {
         child_pids[num_children++] = pid;
-      }      
+      }            
     }
   } 
 
-  for (size_t i = 0; i < num_children; i++) {
-    int status;
-    pid_t terminated_pid = waitpid(child_pids[i], &status, 0);
-    
-    if (terminated_pid == -1) {
-      fprintf(stderr, "Error waiting for child process %d to terminate\n", child_pids[i]);
-      return 1;
-    }
-
-    if (WIFEXITED(status)) {
-      printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-      printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
-    } else {
-      printf("Process %d terminated abnormally\n", terminated_pid);
-    }
-    //write(STDOUT_FILENO, "Process %d terminated\n", 23,child_pids[i]);
-  }
   closedir(target_dir);
   ems_terminate();
-  return 0;
-  
+  return 0;  
 }
