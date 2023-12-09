@@ -22,6 +22,7 @@ int is_job_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
+  int max_proc = 10; //FIX ME o que por default value?
 
   if (argc < 2) {
     fprintf(stderr, "Usage: %s <directory_path>\n", argv[0]);
@@ -29,15 +30,11 @@ int main(int argc, char *argv[]) {
   }
 
   if (argc > 2) {
-    char *endptr;
-    unsigned long int delay = strtoul(argv[2], &endptr, 10);
-
-    if (*endptr != '\0' || delay > UINT_MAX) {
-      fprintf(stderr, "Invalid delay value or value too large\n");
+    max_proc = atoi(argv[2]);
+    if (max_proc <= 0) {
+      fprintf(stderr, "Invalid MAX_PROC value\n");
       return 1;
     }
-
-    state_access_delay_ms = (unsigned int)delay;
   }
 
   if (ems_init(state_access_delay_ms)) {
@@ -51,35 +48,17 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
-  pid_t *child_pids = malloc(sizeof(pid_t));
-  if (child_pids == NULL) {
-    perror("Memory allocation failed");
-    return 1;
-  }
+  pid_t child_pids[max_proc];
   size_t num_children = 0;
-  size_t capacity = 1; //FIX ME nao tao crucial mas se calhar começar com numero maior para diminuir reallocs ???
-
 
   struct dirent *entry;
   while ((entry = readdir(target_dir)) != NULL) {
     if (is_job_file(entry->d_name)) {
-      if (num_children == capacity) {
-        capacity += 1; //FIX ME lento, maybe *= 2 ???
-        pid_t *new_ptr = realloc(child_pids, capacity*sizeof(pid_t));
-        if (new_ptr == NULL) {
-          perror("Memory reallocation failed");
-          free(child_pids);
-          return 1;
-        }
-        child_pids = new_ptr;
-      }
       pid_t pid = fork();
       if (pid == -1) {
         perror("Error in fork");
-        free(child_pids);
         return 1;
       } else if (pid == 0) {
-
         char job_file_path[PATH_MAX];
         snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
         int fd_job = open(job_file_path, O_RDONLY);
@@ -202,7 +181,6 @@ int main(int argc, char *argv[]) {
     waitpid(child_pids[i], NULL, 0);
   } 
 
-  free(child_pids);
   closedir(target_dir);
   ems_terminate();
   return 0;
