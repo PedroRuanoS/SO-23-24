@@ -188,11 +188,23 @@ int main(int argc, char *argv[]) {
   } 
 
   for (size_t i = 0; i < num_children; i++) {
-    waitpid(child_pids[i], NULL, 0);
-    printf("Process %d terminated\n", child_pids[i]);
-    //write(STDOUT_FILENO, "Process %d terminated\n", 23,child_pids[i]);
-  } 
+    int status;
+    pid_t terminated_pid = waitpid(child_pids[i], &status, 0);
+    
+    if (terminated_pid == -1) {
+      fprintf(stderr, "Error waiting for child process %d to terminate\n", child_pids[i]);
+      return 1;
+    }
 
+    if (WIFEXITED(status)) {
+      printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+      printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
+    } else {
+      printf("Process %d terminated abnormally\n", terminated_pid);
+    }
+    //write(STDOUT_FILENO, "Process %d terminated\n", 23,child_pids[i]);
+  }
   closedir(target_dir);
   ems_terminate();
   return 0;
