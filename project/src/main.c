@@ -22,25 +22,35 @@ int is_job_file(const char *filename) {
 
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
-  int max_proc = 10; //FIX ME o que por default value?
+  //int max_proc = 10; FIX ME o que por default value?
 
-  if (argc < 2) {
-    fprintf(stderr, "Usage: %s <directory_path>\n", argv[0]);
+  if (argc < 3/*4*/) {
+    fprintf(stderr, "Usage: %s <directory_path> <MAX_PROC> <MAX_THREADS>\n", argv[0]);
     return 1;
   }
+  if (argc > 3/*4*/) {
+    char *endptr;
+    unsigned long int delay = strtoul(argv[3/*4*/], &endptr, 10);
 
-  if (argc > 2) {
-    max_proc = atoi(argv[2]);
-    if (max_proc <= 0) {
-      fprintf(stderr, "Invalid MAX_PROC value\n");
+    if (*endptr != '\0' || delay > UINT_MAX) {
+      fprintf(stderr, "Invalid delay value or value too large\n");
       return 1;
     }
+
+    state_access_delay_ms = (unsigned int)delay;
   }
 
   if (ems_init(state_access_delay_ms)) {
     fprintf(stderr, "Failed to initialize EMS\n");
     return 1;
   }
+
+  int max_proc = atoi(argv[2]);
+  if (max_proc <= 0) {
+    fprintf(stderr, "Invalid MAX_PROC value\n");
+    return 1;
+  }
+  //int max_threads = atoi(argv[3]);
 
   DIR *target_dir = opendir(argv[1]);
   if (target_dir == NULL) {
@@ -179,6 +189,8 @@ int main(int argc, char *argv[]) {
 
   for (size_t i = 0; i < num_children; i++) {
     waitpid(child_pids[i], NULL, 0);
+    printf("Process %d terminated\n", child_pids[i]);
+    //write(STDOUT_FILENO, "Process %d terminated\n", 23,child_pids[i]);
   } 
 
   closedir(target_dir);
