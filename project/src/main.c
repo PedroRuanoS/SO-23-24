@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -8,6 +9,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/wait.h>
 
 #include "constants.h"
 #include "operations.h"
@@ -49,123 +51,158 @@ int main(int argc, char *argv[]) {
     return 1;
   }
 
+  pid_t *child_pids = malloc(sizeof(pid_t));
+  if (child_pids == NULL) {
+    perror("Memory allocation failed");
+    return 1;
+  }
+  size_t num_children = 0;
+  size_t capacity = 1; //FIX ME nao tao crucial mas se calhar começar com numero maior para diminuir reallocs ???
+
+
   struct dirent *entry;
   while ((entry = readdir(target_dir)) != NULL) {
     if (is_job_file(entry->d_name)) {
-      char job_file_path[PATH_MAX];
-      snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
-      int fd_job = open(job_file_path, O_RDONLY);
-      if (fd_job < 0) {
-        perror("Error opening job file");
-        continue;
+      if (num_children == capacity) {
+        capacity += 1; //FIX ME lento, maybe *= 2 ???
+        pid_t *new_ptr = realloc(child_pids, capacity*sizeof(pid_t));
+        if (new_ptr == NULL) {
+          perror("Memory reallocation failed");
+          free(child_pids);
+          return 1;
+        }
+        child_pids = new_ptr;
       }
+      pid_t pid = fork();
+      if (pid == -1) {
+        perror("Error in fork");
+        free(child_pids);
+        return 1;
+      } else if (pid == 0) {
 
-      char out_file_path[PATH_MAX];
-      snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
-        (int)(strlen(entry->d_name) - 5), entry->d_name);
-      int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
-      if (fd_out < 0) {
-        perror("Error opening out file");
-        close(fd_job);
-        continue;
-      }
+        char job_file_path[PATH_MAX];
+        snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
+        int fd_job = open(job_file_path, O_RDONLY);
+        if (fd_job < 0) {
+          perror("Error opening job file");
+          exit(1);
+        }
 
-      enum Command cmd;
-      while ((cmd = get_next(fd_job)) != EOC) {
-        unsigned int event_id, delay;
-        size_t num_rows, num_columns, num_coords;
-        size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-        switch (cmd) {
-        case CMD_CREATE: 
-          if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
+        char out_file_path[PATH_MAX];
+        snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
+          (int)(strlen(entry->d_name) - 5), entry->d_name);
+        int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
+        if (fd_out < 0) {
+          perror("Error opening out file");
+          close(fd_job);
+          exit(1);
+        }
 
-          if (ems_create(event_id, num_rows, num_columns)) {
-            fprintf(stderr, "Failed to create event\n");
-          }
+        enum Command cmd;
+        while ((cmd = get_next(fd_job)) != EOC) {
+          unsigned int event_id, delay;
+          size_t num_rows, num_columns, num_coords;
+          size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+          switch (cmd) {
+          case CMD_CREATE: 
+            if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
 
-          break;
-    
-        case CMD_RESERVE: 
-          num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+            if (ems_create(event_id, num_rows, num_columns)) {
+              fprintf(stderr, "Failed to create event\n");
+            }
 
-          if (num_coords == 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
+            break;
+      
+          case CMD_RESERVE: 
+            num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
-          if (ems_reserve(event_id, num_coords, xs, ys)) {
-            fprintf(stderr, "Failed to reserve seats\n");
-          }
+            if (num_coords == 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
 
-          break;
-        
-        case CMD_SHOW: 
-          if (parse_show(fd_job, &event_id) != 0) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
+            if (ems_reserve(event_id, num_coords, xs, ys)) {
+              fprintf(stderr, "Failed to reserve seats\n");
+            }
 
-          if (ems_show(event_id, fd_out)) {
-            fprintf(stderr, "Failed to show event\n");
-          }
-
-          break;
-        
-
-        case CMD_LIST_EVENTS: 
-          if (ems_list_events(fd_out)) {
-            fprintf(stderr, "Failed to list events\n");
-          }
-
-          break;
-        
-        case CMD_WAIT: 
-          if (parse_wait(fd_job, &delay, NULL) == -1) {
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            continue;
-          }
-            
-          if (delay > 0) {
-            printf("Waiting...\n");
-            ems_wait(delay);
-          }
-
-          break;
-        
-        case CMD_INVALID:
-          fprintf(stderr, "Invalid command. See HELP for usage\n");
-          break;
-
-        case CMD_HELP:
-          printf(
-            "Available commands:\n"
-            "  CREATE <event_id> <num_rows> <num_columns>\n"
-            "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
-            "  SHOW <event_id>\n"
-            "  LIST\n"
-            "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-            "  BARRIER\n"                      // Not implemented
-            "  HELP\n");
-
-          break;
-
-        case CMD_BARRIER:
-        case CMD_EMPTY:
-          break;
-        
-        case EOC:
-          break;
-        } 
-      }
-
-      close(fd_job);
-      close(fd_out);
+            break;
           
+          case CMD_SHOW: 
+            if (parse_show(fd_job, &event_id) != 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+
+            if (ems_show(event_id, fd_out)) {
+              fprintf(stderr, "Failed to show event\n");
+            }
+
+            break;
+          
+
+          case CMD_LIST_EVENTS: 
+            if (ems_list_events(fd_out)) {
+              fprintf(stderr, "Failed to list events\n");
+            }
+
+            break;
+          
+          case CMD_WAIT: 
+            if (parse_wait(fd_job, &delay, NULL) == -1) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+              
+            if (delay > 0) {
+              printf("Waiting...\n");
+              ems_wait(delay);
+            }
+
+            break;
+          
+          case CMD_INVALID:
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            break;
+
+          case CMD_HELP:
+            printf(
+              "Available commands:\n"
+              "  CREATE <event_id> <num_rows> <num_columns>\n"
+              "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
+              "  SHOW <event_id>\n"
+              "  LIST\n"
+              "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
+              "  BARRIER\n"                      // Not implemented
+              "  HELP\n");
+
+            break;
+
+          case CMD_BARRIER:
+          case CMD_EMPTY:
+            break;
+          
+          case EOC:
+            break;
+          } 
+        }
+
+        close(fd_job);
+        close(fd_out);
+        exit(0);
+      } else {
+        child_pids[num_children++] = pid;
+      }      
     }
-  }  
+  } 
+
+  for (size_t i = 0; i < num_children; i++) {
+    waitpid(child_pids[i], NULL, 0);
+  } 
+
+  free(child_pids);
   closedir(target_dir);
   ems_terminate();
   return 0;
