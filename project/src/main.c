@@ -65,29 +65,29 @@ int main(int argc, char *argv[]) {
 
   struct dirent *entry;
   while ((entry = readdir(target_dir)) != NULL) {
-    if (num_children == (size_t) max_proc) {
-      int status;
-      pid_t terminated_pid = wait(&status);
-      if (terminated_pid == -1) {
-        perror("Error waiting for child process");
-      } else {
-        if (WIFEXITED(status)) {
-          printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
-        } else if (WIFSIGNALED(status)) {
-          printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
+    if (is_job_file(entry->d_name)) {
+      if (num_children == (size_t) max_proc) {
+        int status;
+        pid_t terminated_pid = wait(&status);
+        if (terminated_pid == -1) {
+          perror("Error waiting for child process to terminate\n");
         } else {
-          printf("Process %d terminated abnormally\n", terminated_pid);
+          if (WIFEXITED(status)) {
+            printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+          } else if (WIFSIGNALED(status)) {
+            printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
+          } else {
+            printf("Process %d terminated abnormally\n", terminated_pid);
+          }
         }
-      }
-      for (size_t i = 0; i < num_children; i++) {
-        if (child_pids[i] == terminated_pid) {
-          child_pids[i]= child_pids[num_children - 1];
-          num_children--;
-          break;
+        for (size_t i = 0; i < num_children; i++) {
+          if (child_pids[i] == terminated_pid) {
+            child_pids[i] = child_pids[num_children - 1];
+            num_children--;
+            break;
+          }
         }
-      }
-    }
-    if (is_job_file(entry->d_name)) {    
+      }    
       pid_t pid = fork();
       if (pid == -1) {
         perror("Error in fork");
@@ -232,8 +232,7 @@ for (size_t i = 0; i < num_children; i++) {
   }
 }
 
-
-  closedir(target_dir);
-  ems_terminate();
-  return 0;  
+closedir(target_dir);
+ems_terminate();
+return 0;  
 }
