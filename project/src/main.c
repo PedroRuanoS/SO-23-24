@@ -213,6 +213,26 @@ int main(int argc, char *argv[]) {
     }
   } 
 
+for (size_t i = 0; i < num_children; i++) {
+  int status;
+  pid_t terminated_pid;
+  terminated_pid = waitpid(child_pids[i], &status, 0);
+  
+  if (terminated_pid == -1) {
+    fprintf(stderr, "Error waiting for child process %d to terminate\n", child_pids[i]);
+    
+  }
+
+  if (WIFEXITED(status)) {
+    printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+  } else if (WIFSIGNALED(status)) {
+    printf("Process %d killed by signal %d\n", terminated_pid, WTERMSIG(status));
+  } else {
+    printf("Process %d terminated abnormally\n", terminated_pid);
+  }
+}
+
+
   closedir(target_dir);
   ems_terminate();
   return 0;  
