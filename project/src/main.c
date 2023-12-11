@@ -109,9 +109,13 @@ void *command_thread_fn(void* arg) {
     command cmd_args = dequeue(queue);
 
     // Check for termination
+    pthread_mutex_lock(&queue->mutex);
     if (queue->terminate && queue->head == NULL) {
+      pthread_mutex_unlock(&queue->mutex);
       break;
     }
+    pthread_mutex_unlock(&queue->mutex);
+    
     switch (cmd_args.cmd) {
       case CMD_CREATE:         
         if (ems_create(cmd_args.event_id, cmd_args.num_rows, cmd_args.num_columns)) {
@@ -268,6 +272,7 @@ int main(int argc, char *argv[]) {
           unsigned int event_id, delay;
           size_t num_rows, num_columns, num_coords;
           size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+          command cmd_args = {.cmd = cmd};
 
           switch (cmd) {
             case CMD_CREATE: 
@@ -275,10 +280,10 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Invalid command. See HELP for usage\n");
                 continue;
               }
-              // MUDAR PARA CMD_ARGS
-              command cmd_args_create = {.cmd = cmd, .event_id = event_id, .num_rows = num_rows, .num_columns = num_columns};
-
-              enqueue(&commandQueue, &cmd_args_create);
+              cmd_args.event_id = event_id;  
+              cmd_args.num_rows = num_rows;
+              cmd_args.num_columns = num_columns;      
+              enqueue(&commandQueue, &cmd_args);
               break;
 
             case CMD_RESERVE: 
@@ -289,12 +294,13 @@ int main(int argc, char *argv[]) {
                 continue;
               }
               
-              command cmd_args_reserve = {.cmd = cmd, .event_id = event_id, .num_coords = num_coords};
+              cmd_args.event_id = event_id;
+              cmd_args.num_coords = num_coords;
               for (size_t i = 0; i < MAX_RESERVATION_SIZE; ++i) {
-                cmd_args_reserve.xs[i] = xs[i];
-                cmd_args_reserve.ys[i] = ys[i];
+                cmd_args.xs[i] = xs[i];
+                cmd_args.ys[i] = ys[i];
               }              
-              enqueue(&commandQueue, &cmd_args_reserve);
+              enqueue(&commandQueue, &cmd_args);
               break;
             
             case CMD_SHOW: 
@@ -303,14 +309,13 @@ int main(int argc, char *argv[]) {
                 continue;
               }
 
-              command cmd_args_show = {.cmd = cmd, .event_id = event_id};
-              enqueue(&commandQueue, &cmd_args_show);
+              cmd_args.event_id = event_id;
+              enqueue(&commandQueue, &cmd_args);
               break;
             
 
             case CMD_LIST_EVENTS:
-              command cmd_args_list = {.cmd = cmd};
-              enqueue(&commandQueue, &cmd_args_list);
+              enqueue(&commandQueue, &cmd_args);
               break;
             
             case CMD_WAIT: 
@@ -318,8 +323,8 @@ int main(int argc, char *argv[]) {
                 fprintf(stderr, "Invalid command. See HELP for usage\n");
                 continue;
               }
-              command cmd_args_wait = {.cmd = cmd, .delay = delay};
-              enqueue(&commandQueue, &cmd_args_wait);
+              cmd_args.delay = delay;
+              enqueue(&commandQueue, &cmd_args);
               break;
             
             case CMD_INVALID:
