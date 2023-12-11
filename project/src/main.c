@@ -2,6 +2,7 @@
 #include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
@@ -11,28 +12,166 @@
 #include <errno.h>
 #include <string.h>
 #include <sys/wait.h>
+#include <pthread.h>
 
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
+
+typedef struct {
+  enum Command cmd;
+  unsigned int event_id, delay;
+  size_t num_rows, num_columns, num_coords;
+  size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+} command;
+
+typedef struct queueNode {
+  command cmd;
+  struct queueNode *next;
+} QueueNode;
+
+typedef struct {
+  QueueNode *head;
+  QueueNode *tail;
+  pthread_mutex_t mutex;
+  pthread_cond_t cond;
+  int fd;
+  bool terminate;  // Flag to signal termination
+} CommandQueue;
+
+void init_queue(CommandQueue *queue, int fd) {
+  queue->head = queue->tail = NULL;
+  pthread_mutex_init(&queue->mutex, NULL);
+  pthread_cond_init(&queue->cond, NULL);
+  queue->fd = fd;
+  queue->terminate = false;
+}
+
+void enqueue(CommandQueue *queue, command *cmd) {
+  pthread_mutex_lock(&queue->mutex);
+
+  QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
+  if (newNode == NULL) {
+    fprintf(stderr, "Error: Memory allocation failed\n");
+    exit(1);
+  }
+
+  newNode->cmd = *cmd;
+  newNode->next = NULL;
+
+  if (queue->tail == NULL) {
+      queue->head = queue->tail = newNode;
+  } else {
+      queue->tail->next = newNode;
+      queue->head = newNode;
+  }
+
+  pthread_cond_signal(&queue->cond);
+  pthread_mutex_unlock(&queue->mutex);
+}
+
+command dequeue(CommandQueue *queue) {
+  pthread_mutex_lock(&queue->mutex);
+
+  while (queue->head == NULL && !queue->terminate) {
+    // Wait for a command to be enqueued or termination signal
+    pthread_cond_wait(&queue->cond, &queue->mutex);
+  }
+
+  command cmd_args;
+
+  if (queue->head != NULL) {
+    QueueNode *temp = queue->head;
+    cmd_args = temp->cmd;
+
+    queue->head = temp->next;
+    if (queue->head == NULL) {
+      queue->tail = NULL;
+    }
+
+    free(temp);
+  }
+
+  pthread_mutex_unlock(&queue->mutex);
+
+  return cmd_args;
+}
 
 int is_job_file(const char *filename) {
   const char *dot = strrchr(filename, '.');
   return dot && !strcmp(dot, ".jobs");
 }
 
+void *command_thread_fn(void* arg) {
+  CommandQueue *queue = (CommandQueue*) arg;
+
+  while (true) {
+    command cmd_args = dequeue(queue);
+
+    // Check for termination
+    if (queue->terminate && queue->head == NULL) {
+      break;
+    }
+    switch (cmd_args.cmd) {
+      case CMD_CREATE:         
+        if (ems_create(cmd_args.event_id, cmd_args.num_rows, cmd_args.num_columns)) {
+          fprintf(stderr, "Failed to create event\n");
+        }
+
+        break;
+
+      case CMD_RESERVE: 
+        if (ems_reserve(cmd_args.event_id, cmd_args.num_coords, cmd_args.xs, cmd_args.ys)) {
+          fprintf(stderr, "Failed to reserve seats\n");
+        }
+
+        break;
+      
+      case CMD_SHOW: 
+        if (ems_show(cmd_args.event_id, queue->fd)) {
+          fprintf(stderr, "Failed to show event\n");
+        }
+
+        break;      
+
+      case CMD_LIST_EVENTS: 
+        if (ems_list_events(queue->fd)) {
+          fprintf(stderr, "Failed to list events\n");
+        }
+
+        break;
+      
+      case CMD_WAIT:           
+        if (cmd_args.delay > 0) {
+          printf("Waiting...\n");
+          ems_wait(cmd_args.delay);
+        }
+
+        break;
+
+      case CMD_INVALID:
+      case CMD_HELP:
+      case CMD_BARRIER:
+      case CMD_EMPTY:
+      case EOC:
+      default:
+        break;
+    }
+  }  
+  return NULL;
+}
+
 int main(int argc, char *argv[]) {
   unsigned int state_access_delay_ms = STATE_ACCESS_DELAY_MS;
-  //int max_proc = 10; FIX ME o que por default value?
 
-  if (argc < 3/*4*/) {
+  if (argc < 4) {
     fprintf(stderr, "Usage: %s <directory_path> <MAX_PROC> <MAX_THREADS>\n", argv[0]);
     return 1;
   }
 
-  if (argc > 3/*4*/) {
+  if (argc > 4) {
     char *endptr;
-    unsigned long int delay = strtoul(argv[3/*4*/], &endptr, 10);
+    unsigned long int delay = strtoul(argv[4], &endptr, 10);
 
     if (*endptr != '\0' || delay > UINT_MAX) {
       fprintf(stderr, "Invalid delay value or value too large\n");
@@ -52,7 +191,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Invalid MAX_PROC value\n");
     return 1;
   }
-  //int max_threads = atoi(argv[3]);
+  int max_threads = atoi(argv[3]);
 
   DIR *target_dir = opendir(argv[1]);
   if (target_dir == NULL) {
@@ -112,101 +251,114 @@ int main(int argc, char *argv[]) {
           exit(1);
         }
 
+        CommandQueue commandQueue;
+        init_queue(&commandQueue, fd_out);        
+        pthread_t tid[max_threads];
         enum Command cmd;
+
+        for (int i = 0; i < max_threads; i++) {
+          if (pthread_create(&tid[i], NULL, command_thread_fn, (void *)&commandQueue) != 0) {
+            fprintf(stderr, "Failed to create command thread: %s\n", strerror(errno));
+            exit(1);
+          }
+        }
+
         while ((cmd = get_next(fd_job)) != EOC) {
+          
           unsigned int event_id, delay;
           size_t num_rows, num_columns, num_coords;
           size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+
           switch (cmd) {
-          case CMD_CREATE: 
-            if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
-              continue;
-            }
+            case CMD_CREATE: 
+              if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
+                fprintf(stderr, "Invalid command. See HELP for usage\n");
+                continue;
+              }
+              // MUDAR PARA CMD_ARGS
+              command cmd_args_create = {.cmd = cmd, .event_id = event_id, .num_rows = num_rows, .num_columns = num_columns};
 
-            if (ems_create(event_id, num_rows, num_columns)) {
-              fprintf(stderr, "Failed to create event\n");
-            }
+              enqueue(&commandQueue, &cmd_args_create);
+              break;
 
-            break;
-      
-          case CMD_RESERVE: 
-            num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+            case CMD_RESERVE: 
+              num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
 
-            if (num_coords == 0) {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
-              continue;
-            }
-
-            if (ems_reserve(event_id, num_coords, xs, ys)) {
-              fprintf(stderr, "Failed to reserve seats\n");
-            }
-
-            break;
-          
-          case CMD_SHOW: 
-            if (parse_show(fd_job, &event_id) != 0) {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
-              continue;
-            }
-
-            if (ems_show(event_id, fd_out)) {
-              fprintf(stderr, "Failed to show event\n");
-            }
-
-            break;
-          
-
-          case CMD_LIST_EVENTS: 
-            if (ems_list_events(fd_out)) {
-              fprintf(stderr, "Failed to list events\n");
-            }
-
-            break;
-          
-          case CMD_WAIT: 
-            if (parse_wait(fd_job, &delay, NULL) == -1) {
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
-              continue;
-            }
+              if (num_coords == 0) {
+                fprintf(stderr, "Invalid command. See HELP for usage\n");
+                continue;
+              }
               
-            if (delay > 0) {
-              printf("Waiting...\n");
-              ems_wait(delay);
-            }
+              command cmd_args_reserve = {.cmd = cmd, .event_id = event_id, .num_coords = num_coords};
+              for (size_t i = 0; i < MAX_RESERVATION_SIZE; ++i) {
+                cmd_args_reserve.xs[i] = xs[i];
+                cmd_args_reserve.ys[i] = ys[i];
+              }              
+              enqueue(&commandQueue, &cmd_args_reserve);
+              break;
+            
+            case CMD_SHOW: 
+              if (parse_show(fd_job, &event_id) != 0) {
+                fprintf(stderr, "Invalid command. See HELP for usage\n");
+                continue;
+              }
 
-            break;
-          
-          case CMD_INVALID:
-            fprintf(stderr, "Invalid command. See HELP for usage\n");
-            break;
+              command cmd_args_show = {.cmd = cmd, .event_id = event_id};
+              enqueue(&commandQueue, &cmd_args_show);
+              break;
+            
 
-          case CMD_HELP:
-            printf(
-              "Available commands:\n"
-              "  CREATE <event_id> <num_rows> <num_columns>\n"
-              "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
-              "  SHOW <event_id>\n"
-              "  LIST\n"
-              "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-              "  BARRIER\n"                      // Not implemented
-              "  HELP\n");
+            case CMD_LIST_EVENTS:
+              command cmd_args_list = {.cmd = cmd};
+              enqueue(&commandQueue, &cmd_args_list);
+              break;
+            
+            case CMD_WAIT: 
+              if (parse_wait(fd_job, &delay, NULL) == -1) {
+                fprintf(stderr, "Invalid command. See HELP for usage\n");
+                continue;
+              }
+              command cmd_args_wait = {.cmd = cmd, .delay = delay};
+              enqueue(&commandQueue, &cmd_args_wait);
+              break;
+            
+            case CMD_INVALID:
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              break;
 
-            break;
+            case CMD_HELP:
+              printf(
+                "Available commands:\n"
+                "  CREATE <event_id> <num_rows> <num_columns>\n"
+                "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
+                "  SHOW <event_id>\n"
+                "  LIST\n"
+                "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
+                "  BARRIER\n"                      // Not implemented
+                "  HELP\n");
 
-          case CMD_BARRIER:
-          case CMD_EMPTY:
-            break;
-          
-          case EOC:
-            break;
-          } 
+              break;
+
+            case CMD_BARRIER:
+            case CMD_EMPTY:
+              break;
+            
+            case EOC:
+              break;
+          }          
         }
+        // Signal termination and wake up waiting threads
+        pthread_mutex_lock(&commandQueue.mutex);
+        commandQueue.terminate = true;
+        pthread_cond_broadcast(&commandQueue.cond);
+        pthread_mutex_unlock(&commandQueue.mutex);
 
+        for (int i = 0; i < max_threads; i++) {
+          pthread_join(tid[i], NULL);
+        }
         close(fd_job);
         close(fd_out);
         exit(0);
-
       } else {
         child_pids[num_children++] = pid;
       }            
