@@ -37,6 +37,7 @@ typedef struct {
   pthread_cond_t cond;
   int fd;
   bool terminate;  // Flag to signal termination
+  bool barrier_active;
 } CommandQueue;
 
 void init_queue(CommandQueue *queue, int fd) {
@@ -45,6 +46,7 @@ void init_queue(CommandQueue *queue, int fd) {
   pthread_cond_init(&queue->cond, NULL);
   queue->fd = fd;
   queue->terminate = false;
+  queue->barrier_active = false;
 }
 
 void enqueue(CommandQueue *queue, command *cmd) {
@@ -92,8 +94,11 @@ command dequeue(CommandQueue *queue) {
     free(temp);
   }
 
-  pthread_mutex_unlock(&queue->mutex);
+  if (queue->head == NULL && queue->barrier_active) {
+    pthread_cond_signal(&queue->cond);
+  }
 
+  pthread_mutex_unlock(&queue->mutex);
   return cmd_args;
 }
 
@@ -339,12 +344,23 @@ int main(int argc, char *argv[]) {
                 "  SHOW <event_id>\n"
                 "  LIST\n"
                 "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-                "  BARRIER\n"                      // Not implemented
+                "  BARRIER\n"                      
                 "  HELP\n");
 
               break;
 
-            case CMD_BARRIER:
+            case CMD_BARRIER: 
+              pthread_mutex_lock(&commandQueue.mutex);
+              commandQueue.barrier_active = true;
+
+              while (commandQueue.head != NULL) {
+                pthread_cond_wait(&commandQueue.cond, &commandQueue.mutex);
+              }
+
+              commandQueue.barrier_active = false;
+              pthread_mutex_unlock(&commandQueue.mutex);
+              break;
+
             case CMD_EMPTY:
               break;
             
