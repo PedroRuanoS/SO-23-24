@@ -4,13 +4,15 @@
 
 struct EventList* create_list() {
   struct EventList* list = (struct EventList*)malloc(sizeof(struct EventList));
-  if (!list) return NULL;
+  if (!list) return NULL; 
   list->head = NULL;
   list->tail = NULL;
+  pthread_rwlock_init(&list->rwl, NULL);
   return list;
 }
 
 int append_to_list(struct EventList* list, struct Event* event) {
+  pthread_rwlock_wrlock(&list->rwl);
   if (!list) return 1;
 
   struct ListNode* new_node = (struct ListNode*)malloc(sizeof(struct ListNode));
@@ -26,6 +28,7 @@ int append_to_list(struct EventList* list, struct Event* event) {
     list->tail->next = new_node;
     list->tail = new_node;
   }
+  pthread_rwlock_unlock(&list->rwl);
 
   return 0;
 }

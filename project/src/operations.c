@@ -70,15 +70,19 @@ int ems_terminate() {
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
+  pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
+    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
 
   if (get_event_with_delay(event_id) != NULL) {
     fprintf(stderr, "Event already exists\n");
+    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
+  pthread_rwlock_unlock(&event_list->rwl);
 
   struct Event* event = malloc(sizeof(struct Event));
 
@@ -114,6 +118,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 }
 
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
+  pthread_rwlock_wrlock(&event_list->rwl); //acrescentar rdlock ou deixar wrlock??
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -154,13 +159,16 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     }
     return 1;
   }
+  pthread_rwlock_unlock(&event_list->rwl);
 
   return 0;
 }
 
-int ems_show(unsigned int event_id, int fd) { //aceitar parametro fd
+int ems_show(unsigned int event_id, int fd) {
+  pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
+    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
 
@@ -168,6 +176,7 @@ int ems_show(unsigned int event_id, int fd) { //aceitar parametro fd
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
+    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
 
@@ -179,11 +188,13 @@ int ems_show(unsigned int event_id, int fd) { //aceitar parametro fd
 
       if (write(fd, buffer, len) < 0) {
         perror("Error writing to file"); //mudar fprintf
+        pthread_rwlock_unlock(&event_list->rwl);
         return 1;
       }
       if (j < event->cols) {
         if (write(fd, " ", 1) < 0) {
           perror("Error writing to file");
+          pthread_rwlock_unlock(&event_list->rwl);
           return 1;
         }
       }    
@@ -193,16 +204,20 @@ int ems_show(unsigned int event_id, int fd) { //aceitar parametro fd
       return 1;
     }
   }
+  pthread_rwlock_unlock(&event_list->rwl);
   return 0;
 }
 
 int ems_list_events(int fd) {
+  pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
+    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
 
   if (event_list->head == NULL) {
+    pthread_rwlock_unlock(&event_list->rwl);
     if (write(fd, "No events\n", 11) < 0) {
       perror("Error writing to file"); //mudar fprintf
       return 1;
@@ -214,10 +229,12 @@ int ems_list_events(int fd) {
   while (current != NULL) {
     if (write(fd, "Event: ", 8) < 0) {
       perror("Error writing to file"); //mudar fprintf
+      pthread_rwlock_unlock(&event_list->rwl);
       return 1;
     }
     if (write(fd, "Event: ", 8) < 0) {
       perror("Error writing to file"); //mudar fprintf
+      pthread_rwlock_unlock(&event_list->rwl);
       return 1;
     }
     char buffer[UINT_MAX_DIGITS + 1];
@@ -225,10 +242,12 @@ int ems_list_events(int fd) {
 
     if (write(fd, buffer, len) < 0) {
       perror("Error writing to file"); //mudar fprintf
+      pthread_rwlock_unlock(&event_list->rwl);
       return 1;
     }
     current = current->next;
   }
+  pthread_rwlock_unlock(&event_list->rwl);
 
   return 0;
 }

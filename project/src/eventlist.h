@@ -2,6 +2,7 @@
 #define EVENT_LIST_H
 
 #include <stddef.h>
+#include <pthread.h>
 
 struct Event {
   unsigned int id;            /// Event id
@@ -22,6 +23,7 @@ struct ListNode {
 struct EventList {
   struct ListNode* head;  // Head of the list
   struct ListNode* tail;  // Tail of the list
+  pthread_rwlock_t rwl;   // Read-write lock
 };
 
 /// Creates a new event list.
