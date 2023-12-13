@@ -38,7 +38,7 @@ typedef struct {
   int fd;
   bool terminate;  // Flag to signal termination
   bool barrier_active;
-  bool *thread_wait;
+  unsigned int *thread_wait;
 } CommandQueue;
 
 typedef struct {
@@ -53,13 +53,13 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
   queue->fd = fd;
   queue->terminate = false;
   queue->barrier_active = false;
-  queue->thread_wait = (bool *)malloc(max_threads * sizeof(bool));
+  queue->thread_wait = (unsigned int*)malloc(max_threads * sizeof(unsigned int));
   if (queue->thread_wait == NULL) {
     fprintf(stderr, "Error: Memory allocation failed\n");
     exit(1);
   }
   for (size_t i = 0; i < max_threads; i++) {
-        queue->thread_wait[i] = false;
+        queue->thread_wait[i] = 0;
     }
 }
 
@@ -137,6 +137,11 @@ void *command_thread_fn(void* arg) {
     }
     pthread_mutex_unlock(&queue->mutex);
     
+    if (cmd_args.delay > 0 && queue->thread_wait[thread_id] != 0) {
+      ems_wait(cmd_args.delay);
+      queue->thread_wait[thread_id] = 0;
+    }
+
     switch (cmd_args.cmd) {
       case CMD_CREATE:         
         if (ems_create(cmd_args.event_id, cmd_args.num_rows, cmd_args.num_columns)) {
@@ -167,13 +172,6 @@ void *command_thread_fn(void* arg) {
         break;
       
       case CMD_WAIT:           
-        if (cmd_args.delay > 0 && queue->thread_wait[thread_id]) {
-          ems_wait(cmd_args.delay);
-          queue->thread_wait[thread_id] = false;
-        }
-
-        break;
-
       case CMD_INVALID:
       case CMD_HELP:
       case CMD_BARRIER:
@@ -352,7 +350,7 @@ int main(int argc, char *argv[]) {
               if (thread_id == -1) {
                 ems_wait(delay);
               } else {
-                commandQueue.thread_wait[thread_id] = true;
+                commandQueue.thread_wait[thread_id] = delay;
                 cmd_args.delay = delay;
                 enqueue(&commandQueue, &cmd_args);
               }
