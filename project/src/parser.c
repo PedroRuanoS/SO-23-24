@@ -230,8 +230,9 @@ int parse_show(int fd, unsigned int *event_id) {
   return 0;
 }
 
-int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
+int parse_wait(int fd, unsigned int *delay, int *thread_id) {
   char ch;
+  *thread_id = -1;
 
   if (read_uint(fd, delay, &ch) != 0) {
     cleanup(fd);
@@ -243,12 +244,14 @@ int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id) {
       cleanup(fd);
       return 0;
     }
-
-    if (read_uint(fd, thread_id, &ch) != 0 || (ch != '\n' && ch != '\0')) {
+    
+    unsigned int temp_thread_id;
+    if (read_uint(fd, &temp_thread_id, &ch) != 0 || (ch != '\n' && ch != '\0')) {
       cleanup(fd);
       return -1;
     }
-
+    *thread_id = (int)temp_thread_id;
+    
     return 1;
   } else if (ch == '\n' || ch == '\0') {
     return 0;

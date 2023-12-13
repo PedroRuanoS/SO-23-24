@@ -38,15 +38,29 @@ typedef struct {
   int fd;
   bool terminate;  // Flag to signal termination
   bool barrier_active;
+  bool *thread_wait;
 } CommandQueue;
 
-void init_queue(CommandQueue *queue, int fd) {
+typedef struct {
+  int thread_id;
+  CommandQueue *queue;
+} ThreadArg;
+
+void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
   queue->head = queue->tail = NULL;
   pthread_mutex_init(&queue->mutex, NULL);
   pthread_cond_init(&queue->cond, NULL);
   queue->fd = fd;
   queue->terminate = false;
   queue->barrier_active = false;
+  queue->thread_wait = (bool *)malloc(max_threads * sizeof(bool));
+  if (queue->thread_wait == NULL) {
+    fprintf(stderr, "Error: Memory allocation failed\n");
+    exit(1);
+  }
+  for (size_t i = 0; i < max_threads; i++) {
+        queue->thread_wait[i] = false;
+    }
 }
 
 void enqueue(CommandQueue *queue, command *cmd) {
@@ -108,7 +122,9 @@ int is_job_file(const char *filename) {
 }
 
 void *command_thread_fn(void* arg) {
-  CommandQueue *queue = (CommandQueue*) arg;
+  ThreadArg *argument = (ThreadArg*) arg;
+  CommandQueue *queue = argument->queue;
+  int thread_id = argument->thread_id;
 
   while (true) {
     command cmd_args = dequeue(queue);
@@ -151,9 +167,9 @@ void *command_thread_fn(void* arg) {
         break;
       
       case CMD_WAIT:           
-        if (cmd_args.delay > 0) {
-          printf("Waiting...\n");
+        if (cmd_args.delay > 0 && queue->thread_wait[thread_id]) {
           ems_wait(cmd_args.delay);
+          queue->thread_wait[thread_id] = false;
         }
 
         break;
@@ -260,13 +276,17 @@ int main(int argc, char *argv[]) {
           exit(1);
         }
 
+        ThreadArg args[max_threads];
         CommandQueue commandQueue;
-        init_queue(&commandQueue, fd_out);        
+        init_queue(&commandQueue, fd_out, (size_t) max_threads);
         pthread_t tid[max_threads];
         enum Command cmd;
 
         for (int i = 0; i < max_threads; i++) {
-          if (pthread_create(&tid[i], NULL, command_thread_fn, (void *)&commandQueue) != 0) {
+          args[i].thread_id = i;
+          args[i].queue = &commandQueue;
+
+          if (pthread_create(&tid[i], NULL, command_thread_fn, &args[i]) != 0) {
             fprintf(stderr, "Failed to create command thread: %s\n", strerror(errno));
             exit(1);
           }
@@ -275,6 +295,7 @@ int main(int argc, char *argv[]) {
         while ((cmd = get_next(fd_job)) != EOC) {
           
           unsigned int event_id, delay;
+          int thread_id;
           size_t num_rows, num_columns, num_coords;
           size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
           command cmd_args = {.cmd = cmd};
@@ -324,12 +345,18 @@ int main(int argc, char *argv[]) {
               break;
             
             case CMD_WAIT: 
-              if (parse_wait(fd_job, &delay, NULL) == -1) {
+              if (parse_wait(fd_job, &delay, &thread_id) == -1) {
                 fprintf(stderr, "Invalid command. See HELP for usage\n");
                 continue;
               }
-              cmd_args.delay = delay;
-              enqueue(&commandQueue, &cmd_args);
+              if (thread_id == -1) {
+                ems_wait(delay);
+              } else {
+                commandQueue.thread_wait[thread_id] = true;
+                cmd_args.delay = delay;
+                enqueue(&commandQueue, &cmd_args);
+              }
+              
               break;
             
             case CMD_INVALID:
@@ -373,7 +400,7 @@ int main(int argc, char *argv[]) {
         commandQueue.terminate = true;
         pthread_cond_broadcast(&commandQueue.cond);
         pthread_mutex_unlock(&commandQueue.mutex);
-
+        free(commandQueue.thread_wait);
         for (int i = 0; i < max_threads; i++) {
           pthread_join(tid[i], NULL);
         }

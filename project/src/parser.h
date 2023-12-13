@@ -49,6 +49,6 @@ int parse_show(int fd, unsigned int *event_id);
 /// @param delay Pointer to the variable to store the wait delay in.
 /// @param thread_id Pointer to the variable to store the thread ID in. May not be set.
 /// @return 0 if no thread was specified, 1 if a thread was specified, -1 on error.
-int parse_wait(int fd, unsigned int *delay, unsigned int *thread_id);
+int parse_wait(int fd, unsigned int *delay, int *thread_id);
 
 #endif  // EMS_PARSER_H
