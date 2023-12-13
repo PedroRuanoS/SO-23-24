@@ -35,6 +35,7 @@ typedef struct {
   QueueNode *tail;
   pthread_mutex_t mutex;
   pthread_cond_t cond;
+  pthread_cond_t barrier_cond;
   int fd;
   bool terminate;  // Flag to signal termination
   bool barrier_active;
@@ -50,6 +51,7 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
   queue->head = queue->tail = NULL;
   pthread_mutex_init(&queue->mutex, NULL);
   pthread_cond_init(&queue->cond, NULL);
+  pthread_cond_init(&queue->barrier_cond, NULL);
   queue->fd = fd;
   queue->terminate = false;
   queue->barrier_active = false;
@@ -92,6 +94,7 @@ command dequeue(CommandQueue *queue) {
   while (queue->head == NULL && !queue->terminate) {
     // Wait for a command to be enqueued or termination signal
     pthread_cond_wait(&queue->cond, &queue->mutex);
+
   }
 
   command cmd_args;
@@ -108,8 +111,10 @@ command dequeue(CommandQueue *queue) {
     free(temp);
   }
 
+  
   if (queue->head == NULL && queue->barrier_active) {
-    pthread_cond_signal(&queue->cond);
+    // notify main thread once all commands preceding barrier have been executed
+    pthread_cond_signal(&queue->barrier_cond);
   }
 
   pthread_mutex_unlock(&queue->mutex);
@@ -378,8 +383,9 @@ int main(int argc, char *argv[]) {
               pthread_mutex_lock(&commandQueue.mutex);
               commandQueue.barrier_active = true;
 
+              // wait until other threads are finished with the previous commands
               while (commandQueue.head != NULL) {
-                pthread_cond_wait(&commandQueue.cond, &commandQueue.mutex);
+                pthread_cond_wait(&commandQueue.barrier_cond, &commandQueue.mutex);
               }
 
               commandQueue.barrier_active = false;
@@ -402,6 +408,11 @@ int main(int argc, char *argv[]) {
         for (int i = 0; i < max_threads; i++) {
           pthread_join(tid[i], NULL);
         }
+
+        pthread_mutex_destroy(&commandQueue.mutex);
+        pthread_cond_destroy(&commandQueue.cond);
+        pthread_cond_destroy(&commandQueue.barrier_cond);
+        ems_terminate();
         close(fd_job);
         close(fd_out);
         exit(0);
@@ -431,6 +442,5 @@ for (size_t i = 0; i < num_children; i++) {
 }
 
 closedir(target_dir);
-ems_terminate();
 return 0;  
 }

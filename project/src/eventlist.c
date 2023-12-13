@@ -12,8 +12,12 @@ struct EventList* create_list() {
 }
 
 int append_to_list(struct EventList* list, struct Event* event) {
-  pthread_rwlock_wrlock(&list->rwl);
-  if (!list) return 1;
+  pthread_rwlock_rdlock(&list->rwl);
+  if (!list) {
+    pthread_rwlock_unlock(&list->rwl);
+    return 1;
+  }
+  pthread_rwlock_unlock(&list->rwl);
 
   struct ListNode* new_node = (struct ListNode*)malloc(sizeof(struct ListNode));
   if (!new_node) return 1;
@@ -21,6 +25,7 @@ int append_to_list(struct EventList* list, struct Event* event) {
   new_node->event = event;
   new_node->next = NULL;
 
+  pthread_rwlock_wrlock(&list->rwl);
   if (list->head == NULL) {
     list->head = new_node;
     list->tail = new_node;
@@ -36,6 +41,7 @@ int append_to_list(struct EventList* list, struct Event* event) {
 static void free_event(struct Event* event) {
   if (!event) return;
 
+  pthread_rwlock_destroy(&event->rwl);
   free(event->data);
   free(event);
 }
@@ -51,21 +57,25 @@ void free_list(struct EventList* list) {
     free_event(temp->event);
     free(temp);
   }
-
+  pthread_rwlock_destroy(&list->rwl);
   free(list);
 }
 
-struct Event* get_event(struct EventList* list, unsigned int event_id) {
-  if (!list) return NULL;
+struct Event* get_event(struct ListNode* head, struct ListNode* tail/*struct EventList* list*/, unsigned int event_id) {
+  //if (!list) return NULL;
+  if (!head) return NULL;
 
-  struct ListNode* current = list->head;
-  while (current) {
-    struct Event* event = current->event;
+  struct ListNode* current = head; /*list->head;*/
+  struct Event* event;
+  while (current != tail->next) {
+    event = current->event;
+    pthread_rwlock_rdlock(&event->rwl);
     if (event->id == event_id) {
+      pthread_rwlock_unlock(&event->rwl);
       return event;
     }
+    pthread_rwlock_unlock(&event->rwl);
     current = current->next;
   }
-
   return NULL;
 }

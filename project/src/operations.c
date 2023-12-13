@@ -8,6 +8,7 @@
 
 static struct EventList* event_list = NULL;
 static unsigned int state_access_delay_ms = 0;
+pthread_mutex_t fd_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /// Calculates a timespec from a delay in milliseconds.
 /// @param delay_ms Delay in milliseconds.
@@ -20,11 +21,11 @@ static struct timespec delay_to_timespec(unsigned int delay_ms) {
 /// @note Will wait to simulate a real system accessing a costly memory resource.
 /// @param event_id The ID of the event to get.
 /// @return Pointer to the event if found, NULL otherwise.
-static struct Event* get_event_with_delay(unsigned int event_id) {
+static struct Event* get_event_with_delay(struct ListNode* head, struct ListNode* tail, unsigned int event_id) {
   struct timespec delay = delay_to_timespec(state_access_delay_ms);
   nanosleep(&delay, NULL);  // Should not be removed
 
-  return get_event(event_list, event_id);
+  return get_event(head, tail/*event_list*/, event_id);
 }
 
 /// Gets the seat with the given index from the state.
@@ -65,6 +66,7 @@ int ems_terminate() {
     return 1;
   }
 
+  pthread_mutex_destroy(&fd_mutex);
   free_list(event_list);
   return 0;
 }
@@ -77,7 +79,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  if (get_event_with_delay(event_id) != NULL) {
+  if (get_event_with_delay(event_list->head, event_list->tail, event_id) != NULL) {
     fprintf(stderr, "Event already exists\n");
     pthread_rwlock_unlock(&event_list->rwl);
     return 1;
@@ -106,9 +108,11 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   for (size_t i = 0; i < num_rows * num_cols; i++) {
     event->data[i] = 0;
   }
+  pthread_rwlock_init(&event->rwl, NULL);
 
   if (append_to_list(event_list, event) != 0) {
     fprintf(stderr, "Error appending event to list\n");
+    pthread_rwlock_destroy(&event->rwl);
     free(event->data);
     free(event);
     return 1;
@@ -118,19 +122,22 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 }
 
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
-  pthread_rwlock_wrlock(&event_list->rwl); //acrescentar rdlock ou deixar wrlock??
+  pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
+  struct ListNode* head = event_list->head;
+  struct ListNode* tail = event_list->tail;
+  pthread_rwlock_unlock(&event_list->rwl);
 
-  struct Event* event = get_event_with_delay(event_id);
+  struct Event* event = get_event_with_delay(head, tail, event_id);
 
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
   }
-
+  pthread_rwlock_wrlock(&event->rwl);
   unsigned int reservation_id = ++event->reservations;
 
   size_t i = 0;
@@ -159,7 +166,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     }
     return 1;
   }
-  pthread_rwlock_unlock(&event_list->rwl);
+  pthread_rwlock_unlock(&event->rwl);
 
   return 0;
 }
@@ -171,40 +178,66 @@ int ems_show(unsigned int event_id, int fd) {
     pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
+  // list snapshot
+  struct ListNode* head = event_list->head;
+  struct ListNode* tail = event_list->tail;
+  pthread_rwlock_unlock(&event_list->rwl);
 
-  struct Event* event = get_event_with_delay(event_id);
-
+  struct Event* event = get_event_with_delay(head, tail, event_id);
+  
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
-    pthread_rwlock_unlock(&event_list->rwl);
     return 1;
   }
+  pthread_rwlock_rdlock(&event->rwl);
+  // buffer should have enough space for seats, newlines, spaces and the null terminator:
+  // unsimplified expression:
+  // UINT_MAX_DIGITS*event->rows*event->cols + event->rows + (event->cols - 1)*event->rows + 1
+  char buffer[event->rows*event->cols*(UINT_MAX_DIGITS + 1) + 1];
+  size_t rows = event->rows;
+  size_t cols = event->cols;
+  pthread_rwlock_unlock(&event->rwl);
+  size_t buffer_pos = 0;
 
-  for (size_t i = 1; i <= event->rows; i++) {
-    for (size_t j = 1; j <= event->cols; j++) {
+  for (size_t i = 1; i <= rows; i++) {
+    for (size_t j = 1; j <= cols; j++) {
+      pthread_rwlock_rdlock(&event->rwl);
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      char buffer[UINT_MAX_DIGITS + 1];
-      size_t len = (size_t)snprintf(buffer, sizeof(buffer), "%u", *seat);
+      pthread_rwlock_unlock(&event->rwl);
+      size_t len = (size_t)snprintf(buffer + buffer_pos, sizeof(buffer) - buffer_pos, "%u", *seat);
 
-      if (write(fd, buffer, len) < 0) {
-        perror("Error writing to file"); //mudar fprintf
-        pthread_rwlock_unlock(&event_list->rwl);
+      if (len >= sizeof(buffer) - buffer_pos) {
+        perror("Error formatting to buffer");        
         return 1;
       }
-      if (j < event->cols) {
-        if (write(fd, " ", 1) < 0) {
-          perror("Error writing to file");
-          pthread_rwlock_unlock(&event_list->rwl);
-          return 1;
+
+      buffer_pos += len;
+
+      if (j < cols) {
+        len = (size_t)snprintf(buffer + buffer_pos, sizeof(buffer) - buffer_pos, " ");
+        if (len >= sizeof(buffer) - buffer_pos) {
+            perror("Error formatting to buffer");
+            return 1;
         }
-      }    
+        buffer_pos += len;
+      }
     }
-    if (write(fd, "\n", 1) < 0) {
-      perror("Error writing to file");
+    size_t len = (size_t)snprintf(buffer + buffer_pos, sizeof(buffer) - buffer_pos, "\n");
+
+    if (len >= sizeof(buffer) - buffer_pos) {
+      perror("Error formatting to buffer");
       return 1;
     }
+    buffer_pos += len;
   }
-  pthread_rwlock_unlock(&event_list->rwl);
+  // Write the entire buffer to fd
+  pthread_mutex_lock(&fd_mutex);
+  if (write(fd, buffer, buffer_pos) < 0) {
+    perror("Error writing to file");
+    pthread_mutex_unlock(&fd_mutex);
+    return 1;
+  }
+  pthread_mutex_unlock(&fd_mutex);
   return 0;
 }
 
@@ -218,37 +251,58 @@ int ems_list_events(int fd) {
 
   if (event_list->head == NULL) {
     pthread_rwlock_unlock(&event_list->rwl);
+    pthread_mutex_lock(&fd_mutex);
     if (write(fd, "No events\n", 11) < 0) {
-      perror("Error writing to file"); //mudar fprintf
+      pthread_mutex_unlock(&fd_mutex);
+      perror("Error writing to file");
       return 1;
     }
+    pthread_mutex_unlock(&fd_mutex);
     return 0;
-  }
-
-  struct ListNode* current = event_list->head;
-  while (current != NULL) {
-    if (write(fd, "Event: ", 8) < 0) {
-      perror("Error writing to file"); //mudar fprintf
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
-    if (write(fd, "Event: ", 8) < 0) {
-      perror("Error writing to file"); //mudar fprintf
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
-    char buffer[UINT_MAX_DIGITS + 1];
-    size_t len = (size_t)snprintf(buffer, sizeof(buffer), "%u\n", (current->event)->id);
-
-    if (write(fd, buffer, len) < 0) {
-      perror("Error writing to file"); //mudar fprintf
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
-    current = current->next;
   }
   pthread_rwlock_unlock(&event_list->rwl);
 
+  size_t buffer_size = 9 + UINT_MAX_DIGITS;
+  char *buffer = (char*)malloc(sizeof(char)*(buffer_size));
+
+  if (buffer == NULL) {
+    perror("Error allocating memory");
+    return 1;
+  }
+
+  size_t buffer_pos = 0;
+  pthread_rwlock_rdlock(&event_list->rwl);
+  struct ListNode* head = event_list->head;
+  struct ListNode* tail = event_list->tail;
+  pthread_rwlock_unlock(&event_list->rwl);
+
+  struct ListNode* current = head;
+  while (current != tail->next) {
+    
+    if ((buffer_pos + 9 + UINT_MAX_DIGITS) > buffer_size) {
+        // Expand the buffer
+        buffer_size *= 2;
+        buffer = (char *)realloc(buffer, buffer_size);
+        if (buffer == NULL) {
+            perror("Error reallocating memory");
+            return 1;
+        }
+    }
+    pthread_rwlock_rdlock(&(current->event)->rwl);
+    size_t len = (size_t)snprintf(buffer + buffer_pos, buffer_size - buffer_pos, "Event: %u\n", (current->event)->id);
+    pthread_rwlock_unlock(&(current->event)->rwl);
+    buffer_pos += len;
+    current = current->next;
+  }
+  pthread_mutex_lock(&fd_mutex);
+  if (write(fd, buffer, buffer_pos) < 0) {
+    pthread_mutex_unlock(&fd_mutex);
+    perror("Error writing to file");
+    free(buffer);
+    return 1;
+  }
+  pthread_mutex_unlock(&fd_mutex);
+  free(buffer);
   return 0;
 }
 
