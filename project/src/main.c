@@ -21,6 +21,7 @@
 typedef struct {
   enum Command cmd;
   unsigned int event_id, delay;
+  int thread_id;
   size_t num_rows, num_columns, num_coords;
   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
 } command;
@@ -168,11 +169,12 @@ void *command_thread_fn(void* arg) {
 
     printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
 
-    
+    pthread_mutex_lock(&queue->mutex);
     if (cmd_args.delay > 0 && queue->thread_wait[thread_id] != 0) {
-      ems_wait(cmd_args.delay);
+      ems_wait(queue->thread_wait[thread_id]);
       queue->thread_wait[thread_id] = 0;
     }
+    pthread_mutex_unlock(&queue->mutex);
 
     switch (cmd_args.cmd) {
       case CMD_CREATE:
@@ -207,7 +209,11 @@ void *command_thread_fn(void* arg) {
 
         break;
       
-      case CMD_WAIT:           
+      case CMD_WAIT: 
+        queue->thread_wait[cmd_args.thread_id] = cmd_args.delay;
+
+        break;
+
       case CMD_INVALID:
       case CMD_HELP:
       case CMD_BARRIER:
@@ -402,7 +408,7 @@ int main(int argc, char *argv[]) {
             if (thread_id == -1) {
               ems_wait(delay);
             } else {
-              commandQueue.thread_wait[thread_id] = delay;
+              cmd_args.thread_id = thread_id;
               cmd_args.delay = delay;
               enqueue(&commandQueue, &cmd_args);
             }
