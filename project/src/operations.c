@@ -135,10 +135,13 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
 
-  printf("RESERVE | Event: %u\n", event->id);
+  
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
+  }
+  else {
+    printf("RESERVE | Event: %u\n", event->id);
   }
   pthread_rwlock_wrlock(&event->rwl);
   unsigned int reservation_id = ++event->reservations;
@@ -188,11 +191,13 @@ int ems_show(unsigned int event_id, int fd) {
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
   
-  printf("SHOW | Event: %u\n", event->id);
+  
   
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
+  } else {
+    printf("SHOW | Event: %u\n", event->id);
   }
   pthread_rwlock_rdlock(&event->rwl);
   // buffer should have enough space for seats, newlines, spaces and the null terminator:
