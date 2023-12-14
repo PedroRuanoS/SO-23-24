@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <time.h>
 
+#include <stdio.h> //TIRAR
+
 #include "eventlist.h"
 #include "constants.h"
 
@@ -133,6 +135,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
 
+  printf("RESERVE | Event: %u\n", event->id);
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
@@ -184,6 +187,8 @@ int ems_show(unsigned int event_id, int fd) {
   pthread_rwlock_unlock(&event_list->rwl);
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
+  
+  printf("SHOW | Event: %u\n", event->id);
   
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");

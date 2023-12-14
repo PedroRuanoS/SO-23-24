@@ -1,6 +1,7 @@
 #include "eventlist.h"
 
 #include <stdlib.h>
+#include <stdio.h> //TIRAR
 
 struct EventList* create_list() {
   struct EventList* list = (struct EventList*)malloc(sizeof(struct EventList));
@@ -33,6 +34,7 @@ int append_to_list(struct EventList* list, struct Event* event) {
     list->tail->next = new_node;
     list->tail = new_node;
   }
+  printf("CREATE | Event: %u\n", event->id);
   pthread_rwlock_unlock(&list->rwl);
 
   return 0;

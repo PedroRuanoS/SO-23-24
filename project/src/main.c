@@ -66,6 +66,8 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
 }
 
 void enqueue(CommandQueue *queue, command *cmd) {
+  printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
+  
   pthread_mutex_lock(&queue->mutex);
 
   QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
@@ -83,7 +85,13 @@ void enqueue(CommandQueue *queue, command *cmd) {
       queue->tail->next = newNode;
       queue->head = newNode;
   }
-
+///////////
+  QueueNode *current = queue->head;
+  while (current) {
+    printf("QueueNode: %d\n", current->cmd.cmd);
+    current = current->next;
+  }
+////////////
   pthread_cond_signal(&queue->cond);
   pthread_mutex_unlock(&queue->mutex);
 }
@@ -121,6 +129,21 @@ command dequeue(CommandQueue *queue) {
   return cmd_args;
 }
 
+void free_queue(CommandQueue *queue) {
+  if (!queue) return;
+  QueueNode* current = queue->head;
+  while (current) {
+    QueueNode* temp = current;
+    current = current->next;
+
+    free(temp);
+  }
+  free(queue->thread_wait);
+  pthread_mutex_destroy(&queue->mutex);
+  pthread_cond_destroy(&queue->cond);
+  pthread_cond_destroy(&queue->barrier_cond);
+}
+
 int is_job_file(const char *filename) {
   const char *dot = strrchr(filename, '.');
   return dot && !strcmp(dot, ".jobs");
@@ -134,13 +157,8 @@ void *command_thread_fn(void* arg) {
   while (true) {
     command cmd_args = dequeue(queue);
 
-    // Check for termination
-    pthread_mutex_lock(&queue->mutex);
-    if (queue->terminate && queue->head == NULL) {
-      pthread_mutex_unlock(&queue->mutex);
-      break;
-    }
-    pthread_mutex_unlock(&queue->mutex);
+    printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
+
     
     if (cmd_args.delay > 0 && queue->thread_wait[thread_id] != 0) {
       ems_wait(cmd_args.delay);
@@ -148,28 +166,32 @@ void *command_thread_fn(void* arg) {
     }
 
     switch (cmd_args.cmd) {
-      case CMD_CREATE:         
+      case CMD_CREATE:
+        printf("CREATE\n");          
         if (ems_create(cmd_args.event_id, cmd_args.num_rows, cmd_args.num_columns)) {
           fprintf(stderr, "Failed to create event\n");
         }
 
         break;
 
-      case CMD_RESERVE: 
+      case CMD_RESERVE:
+        printf("RESERVE\n"); 
         if (ems_reserve(cmd_args.event_id, cmd_args.num_coords, cmd_args.xs, cmd_args.ys)) {
           fprintf(stderr, "Failed to reserve seats\n");
         }
 
         break;
       
-      case CMD_SHOW: 
+      case CMD_SHOW:
+        printf("SHOW\n");  
         if (ems_show(cmd_args.event_id, queue->fd)) {
           fprintf(stderr, "Failed to show event\n");
         }
 
         break;      
 
-      case CMD_LIST_EVENTS: 
+      case CMD_LIST_EVENTS:
+        printf("LIST\n");  
         if (ems_list_events(queue->fd)) {
           fprintf(stderr, "Failed to list events\n");
         }
@@ -180,12 +202,22 @@ void *command_thread_fn(void* arg) {
       case CMD_INVALID:
       case CMD_HELP:
       case CMD_BARRIER:
+        printf("BARRIER\n"); 
+        break;
       case CMD_EMPTY:
       case EOC:
       default:
         break;
     }
-  }  
+    // Check for termination
+    pthread_mutex_lock(&queue->mutex);
+    if (queue->terminate && queue->head == NULL) {
+      printf("terminate thread\n");
+      pthread_mutex_unlock(&queue->mutex);
+      break;
+    }
+    pthread_mutex_unlock(&queue->mutex);  
+  } 
   return NULL;
 }
 
@@ -232,194 +264,198 @@ int main(int argc, char *argv[]) {
 
   struct dirent *entry;
   while ((entry = readdir(target_dir)) != NULL) {
-    if (is_job_file(entry->d_name)) {
-      if (num_children == (size_t) max_proc) {
-        int status;
-        pid_t terminated_pid = wait(&status);
-        if (terminated_pid == -1) {
-          perror("Error waiting for child process to terminate\n");
-        } else {
-          if (WIFEXITED(status)) {
-            printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
-          } else if (WIFSIGNALED(status)) {
-            printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
-          } else {
-            printf("Process %d terminated abnormally\n", terminated_pid);
-          }
-        }
-        for (size_t i = 0; i < num_children; i++) {
-          if (child_pids[i] == terminated_pid) {
-            child_pids[i] = child_pids[num_children - 1];
-            num_children--;
-            break;
-          }
-        }
-      }    
-      pid_t pid = fork();
-      if (pid == -1) {
-        perror("Error in fork");
-        return 1;
-
-      } else if (pid == 0) {
-        char job_file_path[PATH_MAX];
-        snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
-        int fd_job = open(job_file_path, O_RDONLY);
-        if (fd_job < 0) {
-          perror("Error opening job file");
-          exit(1);
-        }
-
-        char out_file_path[PATH_MAX];
-        snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
-          (int)(strlen(entry->d_name) - 5), entry->d_name);
-        int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
-        if (fd_out < 0) {
-          perror("Error opening out file");
-          close(fd_job);
-          exit(1);
-        }
-
-        ThreadArg args[max_threads];
-        CommandQueue commandQueue;
-        init_queue(&commandQueue, fd_out, (size_t) max_threads);
-        pthread_t tid[max_threads];
-        enum Command cmd;
-
-        for (int i = 0; i < max_threads; i++) {
-          args[i].thread_id = i;
-          args[i].queue = &commandQueue;
-
-          if (pthread_create(&tid[i], NULL, command_thread_fn, &args[i]) != 0) {
-            fprintf(stderr, "Failed to create command thread: %s\n", strerror(errno));
-            exit(1);
-          }
-        }
-
-        while ((cmd = get_next(fd_job)) != EOC) {
-          
-          unsigned int event_id, delay;
-          int thread_id;
-          size_t num_rows, num_columns, num_coords;
-          size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-          command cmd_args = {.cmd = cmd};
-
-          switch (cmd) {
-            case CMD_CREATE: 
-              if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
-                fprintf(stderr, "Invalid command. See HELP for usage\n");
-                continue;
-              }
-              cmd_args.event_id = event_id;  
-              cmd_args.num_rows = num_rows;
-              cmd_args.num_columns = num_columns;      
-              enqueue(&commandQueue, &cmd_args);
-              break;
-
-            case CMD_RESERVE: 
-              num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
-
-              if (num_coords == 0) {
-                fprintf(stderr, "Invalid command. See HELP for usage\n");
-                continue;
-              }
-              
-              cmd_args.event_id = event_id;
-              cmd_args.num_coords = num_coords;
-              for (size_t i = 0; i < MAX_RESERVATION_SIZE; ++i) {
-                cmd_args.xs[i] = xs[i];
-                cmd_args.ys[i] = ys[i];
-              }              
-              enqueue(&commandQueue, &cmd_args);
-              break;
-            
-            case CMD_SHOW: 
-              if (parse_show(fd_job, &event_id) != 0) {
-                fprintf(stderr, "Invalid command. See HELP for usage\n");
-                continue;
-              }
-
-              cmd_args.event_id = event_id;
-              enqueue(&commandQueue, &cmd_args);
-              break;
-            
-
-            case CMD_LIST_EVENTS:
-              enqueue(&commandQueue, &cmd_args);
-              break;
-            
-            case CMD_WAIT: 
-              if (parse_wait(fd_job, &delay, &thread_id) == -1) {
-                fprintf(stderr, "Invalid command. See HELP for usage\n");
-                continue;
-              }
-              if (thread_id == -1) {
-                ems_wait(delay);
-              } else {
-                commandQueue.thread_wait[thread_id] = delay;
-                cmd_args.delay = delay;
-                enqueue(&commandQueue, &cmd_args);
-              }
-              
-              break;
-            
-            case CMD_INVALID:
-              fprintf(stderr, "Invalid command. See HELP for usage\n");
-              break;
-
-            case CMD_HELP:
-              printf(
-                "Available commands:\n"
-                "  CREATE <event_id> <num_rows> <num_columns>\n"
-                "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
-                "  SHOW <event_id>\n"
-                "  LIST\n"
-                "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
-                "  BARRIER\n"                      
-                "  HELP\n");
-
-              break;
-
-            case CMD_BARRIER: 
-              pthread_mutex_lock(&commandQueue.mutex);
-              commandQueue.barrier_active = true;
-
-              // wait until other threads are finished with the previous commands
-              while (commandQueue.head != NULL) {
-                pthread_cond_wait(&commandQueue.barrier_cond, &commandQueue.mutex);
-              }
-
-              commandQueue.barrier_active = false;
-              pthread_mutex_unlock(&commandQueue.mutex);
-              break;
-
-            case CMD_EMPTY:
-              break;
-            
-            case EOC:
-              break;
-          }          
-        }
-        // Signal termination and wake up waiting threads
-        pthread_mutex_lock(&commandQueue.mutex);
-        commandQueue.terminate = true;
-        pthread_cond_broadcast(&commandQueue.cond);
-        pthread_mutex_unlock(&commandQueue.mutex);
-        free(commandQueue.thread_wait);
-        for (int i = 0; i < max_threads; i++) {
-          pthread_join(tid[i], NULL);
-        }
-
-        pthread_mutex_destroy(&commandQueue.mutex);
-        pthread_cond_destroy(&commandQueue.cond);
-        pthread_cond_destroy(&commandQueue.barrier_cond);
-        ems_terminate();
-        close(fd_job);
-        close(fd_out);
-        exit(0);
+    if (!is_job_file(entry->d_name))
+      continue;
+    if (num_children == (size_t) max_proc) {
+      int status;
+      pid_t terminated_pid = wait(&status);
+      if (terminated_pid == -1) {
+        perror("Error waiting for child process to terminate\n");
+        exit(1);
       } else {
-        child_pids[num_children++] = pid;
-      }            
+        if (WIFEXITED(status)) {
+          printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+          printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
+        } else {
+          printf("Process %d terminated abnormally\n", terminated_pid);
+        }
+      }
+      for (size_t i = 0; i < num_children; i++) {
+        if (child_pids[i] == terminated_pid) {
+          child_pids[i] = child_pids[num_children - 1];
+          num_children--;
+          break;
+        }
+      }
     }
+    char job_file_path[PATH_MAX];
+    snprintf(job_file_path, PATH_MAX, "%s/%s", argv[1], entry->d_name);
+    int fd_job = open(job_file_path, O_RDONLY);
+    if (fd_job < 0) {
+      perror("Error opening job file");
+      exit(1);
+    }
+
+    char out_file_path[PATH_MAX];
+    snprintf(out_file_path, PATH_MAX, "%s/%.*s.out", argv[1],
+      (int)(strlen(entry->d_name) - 5), entry->d_name);
+    int fd_out = open(out_file_path, O_CREAT | O_TRUNC | O_WRONLY, S_IRUSR | S_IWUSR);
+    if (fd_out < 0) {
+      perror("Error opening out file");
+      close(fd_job);
+      exit(1);
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+      perror("Error in fork");
+      return 1;
+    } else if (pid == 0) {
+      ThreadArg args[max_threads];
+      CommandQueue commandQueue;
+      init_queue(&commandQueue, fd_out, (size_t) max_threads);
+      pthread_t tid[max_threads];
+      enum Command cmd;
+
+      for (int i = 0; i < max_threads; i++) {
+        args[i].thread_id = i;
+        args[i].queue = &commandQueue;
+
+        if (pthread_create(&tid[i], NULL, command_thread_fn, &args[i]) != 0) {
+          fprintf(stderr, "Failed to create command thread: %s\n", strerror(errno));
+          exit(1);
+        }
+/////////
+        printf("Fd_job: %d | File: %s | Fd_out: %d | Thread created: %d\n", fd_job, out_file_path, fd_out, i);
+      }
+
+      while ((cmd = get_next(fd_job)) != EOC) {
+        
+        unsigned int event_id, delay;
+        int thread_id;
+        size_t num_rows, num_columns, num_coords;
+        size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+        command cmd_args = {.cmd = cmd};
+/////////
+        printf("%s | Command being parsed: %d\n", out_file_path, cmd);
+/////////          
+
+        switch (cmd) {
+          case CMD_CREATE: 
+            if (parse_create(fd_job, &event_id, &num_rows, &num_columns) != 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+            cmd_args.event_id = event_id;  
+            cmd_args.num_rows = num_rows;
+            cmd_args.num_columns = num_columns;      
+            enqueue(&commandQueue, &cmd_args);
+            break;
+
+          case CMD_RESERVE: 
+            num_coords = parse_reserve(fd_job, MAX_RESERVATION_SIZE, &event_id, xs, ys);
+
+            if (num_coords == 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+            
+            cmd_args.event_id = event_id;
+            cmd_args.num_coords = num_coords;
+            for (size_t i = 0; i < MAX_RESERVATION_SIZE; ++i) {
+              cmd_args.xs[i] = xs[i];
+              cmd_args.ys[i] = ys[i];
+            }              
+            enqueue(&commandQueue, &cmd_args);
+            break;
+          
+          case CMD_SHOW: 
+            if (parse_show(fd_job, &event_id) != 0) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+
+            cmd_args.event_id = event_id;
+            enqueue(&commandQueue, &cmd_args);
+            break;
+          
+
+          case CMD_LIST_EVENTS:
+            enqueue(&commandQueue, &cmd_args);
+            break;
+          
+          case CMD_WAIT: 
+            if (parse_wait(fd_job, &delay, &thread_id) == -1) {
+              fprintf(stderr, "Invalid command. See HELP for usage\n");
+              continue;
+            }
+            if (thread_id == -1) {
+              ems_wait(delay);
+            } else {
+              commandQueue.thread_wait[thread_id] = delay;
+              cmd_args.delay = delay;
+              enqueue(&commandQueue, &cmd_args);
+            }
+            
+            break;
+          
+          case CMD_INVALID:
+            fprintf(stderr, "Invalid command. See HELP for usage\n");
+            break;
+
+          case CMD_HELP:
+            printf(
+              "Available commands:\n"
+              "  CREATE <event_id> <num_rows> <num_columns>\n"
+              "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
+              "  SHOW <event_id>\n"
+              "  LIST\n"
+              "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
+              "  BARRIER\n"                      
+              "  HELP\n");
+
+            break;
+
+          case CMD_BARRIER: 
+            pthread_mutex_lock(&commandQueue.mutex);
+            commandQueue.barrier_active = true;
+
+            // wait until other threads are finished with the previous commands
+            while (commandQueue.head != NULL) {
+              pthread_cond_wait(&commandQueue.barrier_cond, &commandQueue.mutex);
+            }
+
+            commandQueue.barrier_active = false;
+            pthread_mutex_unlock(&commandQueue.mutex);
+            break;
+
+          case CMD_EMPTY:
+            break;
+          
+          case EOC:
+            break;
+        }          
+      }
+      // Signal termination and wake up waiting threads
+      pthread_mutex_lock(&commandQueue.mutex);
+      commandQueue.terminate = true;
+      pthread_cond_broadcast(&commandQueue.cond);
+      pthread_mutex_unlock(&commandQueue.mutex);
+
+      for (int i = 0; i < max_threads; i++) {
+        pthread_join(tid[i], NULL);
+        printf("Thread joined: %d\n", i);
+      }   
+      free_queue(&commandQueue);
+
+      ems_terminate();
+      close(fd_job);
+      close(fd_out);
+      exit(0);
+    } else {
+      child_pids[num_children++] = pid;
+    } 
   } 
 
 for (size_t i = 0; i < num_children; i++) {
