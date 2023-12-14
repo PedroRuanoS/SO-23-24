@@ -106,8 +106,8 @@ command dequeue(CommandQueue *queue) {
     pthread_cond_wait(&queue->cond, &queue->mutex);
 
   }
-
-  command cmd_args;
+/////////////
+  command cmd_args = {.cmd = CMD_EMPTY, .delay = 0};
 
   
   if (queue->head != NULL) {
@@ -168,6 +168,7 @@ void *command_thread_fn(void* arg) {
     command cmd_args = dequeue(queue);
 
     printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
+
 
     pthread_mutex_lock(&queue->mutex);
     if (cmd_args.delay > 0 && queue->thread_wait[thread_id] != 0) {

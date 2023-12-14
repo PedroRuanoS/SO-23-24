@@ -262,7 +262,7 @@ int ems_list_events(int fd) {
   if (event_list->head == NULL) {
     pthread_rwlock_unlock(&event_list->rwl);
     pthread_mutex_lock(&fd_mutex);
-    if (write(fd, "No events\n", 11) < 0) {
+    if (write(fd, "No events\n", 10) < 0) {
       pthread_mutex_unlock(&fd_mutex);
       perror("Error writing to file");
       return 1;
