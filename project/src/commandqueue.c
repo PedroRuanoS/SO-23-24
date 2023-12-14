@@ -2,7 +2,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 
 void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
   queue->head = queue->tail = NULL;
@@ -22,7 +21,7 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
     }
 }
 
-void enqueue(CommandQueue *queue, command *cmd) {
+void enqueue(CommandQueue *queue, CommandArgs *cmd) {
   printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
   
   pthread_mutex_lock(&queue->mutex);
@@ -53,7 +52,7 @@ void enqueue(CommandQueue *queue, command *cmd) {
   pthread_mutex_unlock(&queue->mutex);
 }
 
-command dequeue(CommandQueue *queue) {
+CommandArgs dequeue(CommandQueue *queue) {
   pthread_mutex_lock(&queue->mutex);
 
   while (queue->head == NULL && !queue->terminate) {
@@ -63,7 +62,7 @@ command dequeue(CommandQueue *queue) {
 
   }
 /////////////
-  command cmd_args = {.cmd = CMD_EMPTY};
+  CommandArgs cmd_args = {.cmd = CMD_EMPTY};
   
   if (queue->head != NULL) {
     printf("queue head not NULL \n");

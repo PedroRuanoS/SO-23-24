@@ -14,10 +14,10 @@
 #include <sys/wait.h>
 #include <pthread.h>
 
+#include "commandqueue.h"
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
-#include "commandqueue.h"
 
 // typedef struct {
 //   enum Command cmd;
@@ -25,10 +25,10 @@
 //   int thread_id;
 //   size_t num_rows, num_columns, num_coords;
 //   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-// } command;
+// } CommandArgs;
 
 // typedef struct queueNode {
-//   command cmd;
+//   CommandArgs cmd;
 //   struct queueNode *next;
 // } QueueNode;
 
@@ -67,7 +67,7 @@ typedef struct {
 //     }
 // }
 
-// void enqueue(CommandQueue *queue, command *cmd) {
+// void enqueue(CommandQueue *queue, CommandArgs *cmd) {
 //   printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
   
 //   pthread_mutex_lock(&queue->mutex);
@@ -98,17 +98,17 @@ typedef struct {
 //   pthread_mutex_unlock(&queue->mutex);
 // }
 
-// command dequeue(CommandQueue *queue) {
+// CommandArgs dequeue(CommandQueue *queue) {
 //   pthread_mutex_lock(&queue->mutex);
 
 //   while (queue->head == NULL && !queue->terminate) {
-//     // Wait for a command to be enqueued or termination signal
+//     // Wait for a CommandArgs to be enqueued or termination signal
 //     printf("Waiting for commands to be enqueued\n");
 //     pthread_cond_wait(&queue->cond, &queue->mutex);
 
 //   }
 // /////////////
-//   command cmd_args = {.cmd = CMD_EMPTY, .delay = 0};
+//   CommandArgs cmd_args = {.cmd = CMD_EMPTY, .delay = 0};
 
   
 //   if (queue->head != NULL) {
@@ -166,7 +166,7 @@ void *command_thread_fn(void* arg) {
   int thread_id = argument->thread_id;
 
   while (true) {
-    command cmd_args = dequeue(queue);
+    CommandArgs cmd_args = dequeue(queue);
 
     printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
 
@@ -354,7 +354,7 @@ int main(int argc, char *argv[]) {
         int thread_id;
         size_t num_rows, num_columns, num_coords;
         size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-        command cmd_args = {.cmd = cmd};
+        CommandArgs cmd_args = {.cmd = cmd};
 /////////
         printf("%s | Command being parsed: %d\n", out_file_path, cmd);
 /////////          
