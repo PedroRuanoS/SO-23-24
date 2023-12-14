@@ -3,8 +3,6 @@
 #include <unistd.h>
 #include <time.h>
 
-#include <stdio.h> //TIRAR
-
 #include "eventlist.h"
 #include "constants.h"
 

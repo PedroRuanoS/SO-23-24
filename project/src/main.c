@@ -17,142 +17,143 @@
 #include "constants.h"
 #include "operations.h"
 #include "parser.h"
+#include "commandqueue.h"
 
-typedef struct {
-  enum Command cmd;
-  unsigned int event_id, delay;
-  int thread_id;
-  size_t num_rows, num_columns, num_coords;
-  size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-} command;
+// typedef struct {
+//   enum Command cmd;
+//   unsigned int event_id, delay;
+//   int thread_id;
+//   size_t num_rows, num_columns, num_coords;
+//   size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+// } command;
 
-typedef struct queueNode {
-  command cmd;
-  struct queueNode *next;
-} QueueNode;
+// typedef struct queueNode {
+//   command cmd;
+//   struct queueNode *next;
+// } QueueNode;
 
-typedef struct {
-  QueueNode *head;
-  QueueNode *tail;
-  pthread_mutex_t mutex;
-  pthread_cond_t cond;
-  pthread_cond_t barrier_cond;
-  int fd;
-  bool terminate;  // Flag to signal termination
-  bool barrier_active;
-  unsigned int *thread_wait;
-} CommandQueue;
+// typedef struct {
+//   QueueNode *head;
+//   QueueNode *tail;
+//   pthread_mutex_t mutex;
+//   pthread_cond_t cond;
+//   pthread_cond_t barrier_cond;
+//   int fd;
+//   bool terminate;  // Flag to signal termination
+//   bool barrier_active;
+//   unsigned int *thread_wait;
+// } CommandQueue;
 
 typedef struct {
   int thread_id;
   CommandQueue *queue;
 } ThreadArg;
 
-void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
-  queue->head = queue->tail = NULL;
-  pthread_mutex_init(&queue->mutex, NULL);
-  pthread_cond_init(&queue->cond, NULL);
-  pthread_cond_init(&queue->barrier_cond, NULL);
-  queue->fd = fd;
-  queue->terminate = false;
-  queue->barrier_active = false;
-  queue->thread_wait = (unsigned int*)malloc(max_threads * sizeof(unsigned int));
-  if (queue->thread_wait == NULL) {
-    fprintf(stderr, "Error: Memory allocation failed\n");
-    exit(1);
-  }
-  for (size_t i = 0; i < max_threads; i++) {
-        queue->thread_wait[i] = 0;
-    }
-}
+// void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
+//   queue->head = queue->tail = NULL;
+//   pthread_mutex_init(&queue->mutex, NULL);
+//   pthread_cond_init(&queue->cond, NULL);
+//   pthread_cond_init(&queue->barrier_cond, NULL);
+//   queue->fd = fd;
+//   queue->terminate = false;
+//   queue->barrier_active = false;
+//   queue->thread_wait = (unsigned int*)malloc(max_threads * sizeof(unsigned int));
+//   if (queue->thread_wait == NULL) {
+//     fprintf(stderr, "Error: Memory allocation failed\n");
+//     exit(1);
+//   }
+//   for (size_t i = 0; i < max_threads; i++) {
+//         queue->thread_wait[i] = 0;
+//     }
+// }
 
-void enqueue(CommandQueue *queue, command *cmd) {
-  printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
+// void enqueue(CommandQueue *queue, command *cmd) {
+//   printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
   
-  pthread_mutex_lock(&queue->mutex);
+//   pthread_mutex_lock(&queue->mutex);
 
-  QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
-  if (newNode == NULL) {
-    fprintf(stderr, "Error: Memory allocation failed\n");
-    exit(1);
-  }
+//   QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
+//   if (newNode == NULL) {
+//     fprintf(stderr, "Error: Memory allocation failed\n");
+//     exit(1);
+//   }
 
-  newNode->cmd = *cmd;
-  newNode->next = NULL;
+//   newNode->cmd = *cmd;
+//   newNode->next = NULL;
 
-  if (queue->tail == NULL) {
-    queue->head = queue->tail = newNode;
-  } else {
-    queue->tail->next = newNode;
-    queue->tail = newNode;
-  }
-///////////
-  QueueNode *current = queue->head;
-  while (current) {
-    printf("QueueNode: %d\n", current->cmd.cmd);
-    current = current->next;
-  }
-////////////
-  pthread_cond_signal(&queue->cond);
-  pthread_mutex_unlock(&queue->mutex);
-}
+//   if (queue->tail == NULL) {
+//     queue->head = queue->tail = newNode;
+//   } else {
+//     queue->tail->next = newNode;
+//     queue->tail = newNode;
+//   }
+// ///////////
+//   QueueNode *current = queue->head;
+//   while (current) {
+//     printf("QueueNode: %d\n", current->cmd.cmd);
+//     current = current->next;
+//   }
+// ////////////
+//   pthread_cond_signal(&queue->cond);
+//   pthread_mutex_unlock(&queue->mutex);
+// }
 
-command dequeue(CommandQueue *queue) {
-  pthread_mutex_lock(&queue->mutex);
+// command dequeue(CommandQueue *queue) {
+//   pthread_mutex_lock(&queue->mutex);
 
-  while (queue->head == NULL && !queue->terminate) {
-    // Wait for a command to be enqueued or termination signal
-    printf("Waiting for commands to be enqueued\n");
-    pthread_cond_wait(&queue->cond, &queue->mutex);
+//   while (queue->head == NULL && !queue->terminate) {
+//     // Wait for a command to be enqueued or termination signal
+//     printf("Waiting for commands to be enqueued\n");
+//     pthread_cond_wait(&queue->cond, &queue->mutex);
 
-  }
-/////////////
-  command cmd_args = {.cmd = CMD_EMPTY, .delay = 0};
-
-  
-  if (queue->head != NULL) {
-    printf("queue head not NULL \n");
-
-    QueueNode *temp = queue->head;
-    cmd_args = temp->cmd;
-
-    printf("cmd: %d\n", cmd_args.cmd);
-
-    queue->head = temp->next;
-    if (queue->head == NULL) {
-      queue->tail = NULL;
-    }
-
-    free(temp);
-  }
-  else {
-    printf("queue head NULL\n");
-  }
+//   }
+// /////////////
+//   command cmd_args = {.cmd = CMD_EMPTY, .delay = 0};
 
   
-  if (queue->head == NULL && queue->barrier_active) {
-    // notify main thread once all commands preceding barrier have been executed
-    pthread_cond_signal(&queue->barrier_cond);
-  }
+//   if (queue->head != NULL) {
+//     printf("queue head not NULL \n");
 
-  pthread_mutex_unlock(&queue->mutex);
-  return cmd_args;
-}
+//     QueueNode *temp = queue->head;
+//     cmd_args = temp->cmd;
 
-void free_queue(CommandQueue *queue) {
-  if (!queue) return;
-  QueueNode* current = queue->head;
-  while (current) {
-    QueueNode* temp = current;
-    current = current->next;
+//     printf("cmd: %d\n", cmd_args.cmd);
 
-    free(temp);
-  }
-  free(queue->thread_wait);
-  pthread_mutex_destroy(&queue->mutex);
-  pthread_cond_destroy(&queue->cond);
-  pthread_cond_destroy(&queue->barrier_cond);
-}
+//     queue->head = temp->next;
+//     if (queue->head == NULL) {
+//       queue->tail = NULL;
+//     }
+
+//     free(temp);
+//   }
+//   else {
+//     printf("queue head NULL\n");
+//   }
+
+  
+//   if (queue->head == NULL && queue->barrier_active) {
+//     // notify main thread once all commands preceding barrier have been executed
+//     pthread_cond_signal(&queue->barrier_cond);
+//   }
+
+//   pthread_mutex_unlock(&queue->mutex);
+//   return cmd_args;
+// }
+
+// void free_queue(CommandQueue *queue) {
+//   if (!queue) return;
+//   QueueNode* current = queue->head;
+//   while (current) {
+//     QueueNode* temp = current;
+//     current = current->next;
+
+//     free(temp);
+//   }
+//   free(queue->thread_wait);
+//   pthread_mutex_destroy(&queue->mutex);
+//   pthread_cond_destroy(&queue->cond);
+//   pthread_cond_destroy(&queue->barrier_cond);
+// }
 
 int is_job_file(const char *filename) {
   const char *dot = strrchr(filename, '.');
@@ -169,10 +170,11 @@ void *command_thread_fn(void* arg) {
 
     printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
 
-
     pthread_mutex_lock(&queue->mutex);
-    if (cmd_args.delay > 0 && queue->thread_wait[thread_id] != 0) {
+    if (/*cmd_args.delay > 0 &&*/ queue->thread_wait[thread_id] != 0) {
+      pthread_mutex_unlock(&queue->mutex);
       ems_wait(queue->thread_wait[thread_id]);
+      pthread_mutex_lock(&queue->mutex);
       queue->thread_wait[thread_id] = 0;
     }
     pthread_mutex_unlock(&queue->mutex);
