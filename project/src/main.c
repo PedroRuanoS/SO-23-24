@@ -80,10 +80,10 @@ void enqueue(CommandQueue *queue, command *cmd) {
   newNode->next = NULL;
 
   if (queue->tail == NULL) {
-      queue->head = queue->tail = newNode;
+    queue->head = queue->tail = newNode;
   } else {
-      queue->tail->next = newNode;
-      queue->head = newNode;
+    queue->tail->next = newNode;
+    queue->tail = newNode;
   }
 ///////////
   QueueNode *current = queue->head;
@@ -101,15 +101,21 @@ command dequeue(CommandQueue *queue) {
 
   while (queue->head == NULL && !queue->terminate) {
     // Wait for a command to be enqueued or termination signal
+    printf("Waiting for commands to be enqueued\n");
     pthread_cond_wait(&queue->cond, &queue->mutex);
 
   }
 
   command cmd_args;
 
+  
   if (queue->head != NULL) {
+    printf("queue head not NULL \n");
+
     QueueNode *temp = queue->head;
     cmd_args = temp->cmd;
+
+    printf("cmd: %d\n", cmd_args.cmd);
 
     queue->head = temp->next;
     if (queue->head == NULL) {
@@ -117,6 +123,9 @@ command dequeue(CommandQueue *queue) {
     }
 
     free(temp);
+  }
+  else {
+    printf("queue head NULL\n");
   }
 
   
