@@ -48,8 +48,6 @@ void *command_thread_fn(void* arg) {
   while (true) {
     CommandArgs cmd_args = dequeue(queue);
 
-    printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
-
     pthread_mutex_lock(&queue->mutex);
     if (queue->thread_wait[thread_id] != 0) {
       pthread_mutex_unlock(&queue->mutex);
@@ -60,8 +58,7 @@ void *command_thread_fn(void* arg) {
     pthread_mutex_unlock(&queue->mutex);
 
     switch (cmd_args.cmd) {
-      case CMD_CREATE:
-        printf("CREATE\n");          
+      case CMD_CREATE:       
         if (ems_create(cmd_args.event_id, cmd_args.num_rows, cmd_args.num_columns)) {
           fprintf(stderr, "Failed to create event\n");
         }
@@ -69,7 +66,6 @@ void *command_thread_fn(void* arg) {
         break;
 
       case CMD_RESERVE:
-        printf("RESERVE\n"); 
         if (ems_reserve(cmd_args.event_id, cmd_args.num_coords, cmd_args.xs, cmd_args.ys)) {
           fprintf(stderr, "Failed to reserve seats\n");
         }
@@ -77,7 +73,6 @@ void *command_thread_fn(void* arg) {
         break;
       
       case CMD_SHOW:
-        printf("SHOW\n");  
         if (ems_show(cmd_args.event_id, queue->fd)) {
           fprintf(stderr, "Failed to show event\n");
         }
@@ -85,7 +80,6 @@ void *command_thread_fn(void* arg) {
         break;      
 
       case CMD_LIST_EVENTS:
-        printf("LIST\n");  
         if (ems_list_events(queue->fd)) {
           fprintf(stderr, "Failed to list events\n");
         }
@@ -100,7 +94,6 @@ void *command_thread_fn(void* arg) {
       case CMD_INVALID:
       case CMD_HELP:
       case CMD_BARRIER:
-        printf("BARRIER\n"); 
         break;
       case CMD_EMPTY:
       case EOC:
@@ -110,7 +103,6 @@ void *command_thread_fn(void* arg) {
     // Check for termination
     pthread_mutex_lock(&queue->mutex);
     if (queue->terminate && queue->head == NULL) {
-      printf("terminate thread\n");
       pthread_mutex_unlock(&queue->mutex);
       break;
     }

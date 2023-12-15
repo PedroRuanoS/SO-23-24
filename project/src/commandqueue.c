@@ -21,9 +21,7 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
   }  
 }
 
-void enqueue(CommandQueue *queue, CommandArgs *cmd_args) {
-  printf("Enqueue | Command: %d | Fd: %d\n", cmd_args->cmd, queue->fd);
-  
+void enqueue(CommandQueue *queue, CommandArgs *cmd_args) {  
   pthread_mutex_lock(&queue->mutex);
 
   QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
@@ -51,19 +49,14 @@ CommandArgs dequeue(CommandQueue *queue) {
 
   while (queue->head == NULL && !queue->terminate) {
     // Wait for a command to be enqueued or termination signal
-    printf("Waiting for commands to be enqueued\n");
     pthread_cond_wait(&queue->cond, &queue->mutex);
 
   }
-  CommandArgs cmd_args;
+  CommandArgs cmd_args = {.cmd = CMD_EMPTY};
   
   if (queue->head != NULL) {
-    printf("queue head not NULL \n");
-
     QueueNode *temp = queue->head;
     cmd_args = temp->cmd_args;
-
-    printf("cmd: %d\n", cmd_args.cmd);
 
     queue->head = temp->next;
     if (queue->head == NULL) {
@@ -71,9 +64,6 @@ CommandArgs dequeue(CommandQueue *queue) {
     }
 
     free(temp);
-  }
-  else {
-    printf("queue head NULL\n");
   }
   
   if (queue->head == NULL && queue->barrier_active) {

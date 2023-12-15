@@ -61,10 +61,10 @@ void free_list(struct EventList* list) {
   free(list);
 }
 
-struct Event* get_event(struct ListNode* head, struct ListNode* tail/*struct EventList* list*/, unsigned int event_id) {
+struct Event* get_event(struct ListNode* head, struct ListNode* tail, unsigned int event_id) {
   if (!head) return NULL;
 
-  struct ListNode* current = head; /*list->head;*/
+  struct ListNode* current = head;
   struct Event* event;
   while (current != tail->next) {
     event = current->event;
