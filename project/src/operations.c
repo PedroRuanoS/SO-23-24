@@ -124,6 +124,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
   pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
+    pthread_rwlock_unlock(&event_list->rwl);
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
@@ -165,6 +166,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     for (size_t j = 0; j < i; j++) {
       *get_seat_with_delay(event, seat_index(event, xs[j], ys[j])) = 0;
     }
+    pthread_rwlock_unlock(&event->rwl);
     return 1;
   }
   pthread_rwlock_unlock(&event->rwl);
@@ -175,8 +177,8 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 int ems_show(unsigned int event_id, int fd) {
   pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
-    fprintf(stderr, "EMS state must be initialized\n");
     pthread_rwlock_unlock(&event_list->rwl);
+    fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
   // list snapshot
@@ -185,8 +187,6 @@ int ems_show(unsigned int event_id, int fd) {
   pthread_rwlock_unlock(&event_list->rwl);
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
-  
-  
   
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
@@ -200,14 +200,11 @@ int ems_show(unsigned int event_id, int fd) {
   char buffer[event->rows*event->cols*(UINT_MAX_DIGITS + 1) + 1];
   size_t rows = event->rows;
   size_t cols = event->cols;
-  pthread_rwlock_unlock(&event->rwl);
   size_t buffer_pos = 0;
 
   for (size_t i = 1; i <= rows; i++) {
     for (size_t j = 1; j <= cols; j++) {
-      pthread_rwlock_rdlock(&event->rwl);
       unsigned int* seat = get_seat_with_delay(event, seat_index(event, i, j));
-      pthread_rwlock_unlock(&event->rwl);
       size_t len = (size_t)snprintf(buffer + buffer_pos, sizeof(buffer) - buffer_pos, "%u", *seat);
 
       if (len >= sizeof(buffer) - buffer_pos) {
@@ -234,6 +231,8 @@ int ems_show(unsigned int event_id, int fd) {
     }
     buffer_pos += len;
   }
+  pthread_rwlock_unlock(&event->rwl);
+
   // Write the entire buffer to fd
   pthread_mutex_lock(&fd_mutex);
   if (write(fd, buffer, buffer_pos) < 0) {
@@ -248,8 +247,8 @@ int ems_show(unsigned int event_id, int fd) {
 int ems_list_events(int fd) {
   pthread_rwlock_rdlock(&event_list->rwl);
   if (event_list == NULL) {
-    fprintf(stderr, "EMS state must be initialized\n");
     pthread_rwlock_unlock(&event_list->rwl);
+    fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }
 
@@ -292,9 +291,7 @@ int ems_list_events(int fd) {
             return 1;
         }
     }
-    pthread_rwlock_rdlock(&(current->event)->rwl);
     size_t len = (size_t)snprintf(buffer + buffer_pos, buffer_size - buffer_pos, "Event: %u\n", (current->event)->id);
-    pthread_rwlock_unlock(&(current->event)->rwl);
     buffer_pos += len;
     current = current->next;
   }
