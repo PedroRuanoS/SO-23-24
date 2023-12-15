@@ -45,6 +45,6 @@ void free_list(struct EventList* list);
 /// @param list Event list to be searched
 /// @param event_id Event id.
 /// @return Pointer to the event if found, NULL otherwise.
-struct Event* get_event(struct ListNode* head, struct ListNode* tail/*struct EventList* list*/, unsigned int event_id);
+struct Event* get_event(struct ListNode* head, struct ListNode* tail, unsigned int event_id);
 
 #endif  // EVENT_LIST_H

@@ -51,7 +51,7 @@ void *command_thread_fn(void* arg) {
     printf("Dequeue | Command: %d | Fd: %d\n", cmd_args.cmd, queue->fd);
 
     pthread_mutex_lock(&queue->mutex);
-    if (/*cmd_args.delay > 0 &&*/ queue->thread_wait[thread_id] != 0) {
+    if (queue->thread_wait[thread_id] != 0) {
       pthread_mutex_unlock(&queue->mutex);
       ems_wait(queue->thread_wait[thread_id]);
       pthread_mutex_lock(&queue->mutex);
@@ -138,8 +138,6 @@ void process_file(int fd_job, int fd_out, int max_threads) {
       fprintf(stderr, "Failed to create command thread: %s\n", strerror(errno));
       exit(1);
     }
-/////////
-    printf("Fd_job: %d | File:  | Fd_out: %d | Thread created: %d\n", fd_job, /*out_file_path,*/ fd_out, i);
   }
 
   while ((cmd = get_next(fd_job)) != EOC) {
@@ -148,10 +146,7 @@ void process_file(int fd_job, int fd_out, int max_threads) {
     int thread_id;
     size_t num_rows, num_columns, num_coords;
     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-    CommandArgs cmd_args = {.cmd = cmd};
-/////////
-    printf(" | Command being parsed: %d\n", /*out_file_path,*/ cmd);
-/////////          
+    CommandArgs cmd_args = {.cmd = cmd};     
 
     switch (cmd) {
       case CMD_CREATE: 
@@ -223,7 +218,7 @@ void process_file(int fd_job, int fd_out, int max_threads) {
           "  RESERVE <event_id> [(<x1>,<y1>) (<x2>,<y2>) ...]\n"
           "  SHOW <event_id>\n"
           "  LIST\n"
-          "  WAIT <delay_ms> [thread_id]\n"  // thread_id is not implemented
+          "  WAIT <delay_ms> [thread_id]\n"
           "  BARRIER\n"                      
           "  HELP\n");
 
@@ -257,7 +252,6 @@ void process_file(int fd_job, int fd_out, int max_threads) {
 
   for (int i = 0; i < max_threads; i++) {
     pthread_join(tid[i], NULL);
-    printf("Thread joined: %d\n", i);
   }   
   free_queue(&commandQueue);
 
@@ -342,7 +336,7 @@ int main(int argc, char *argv[]) {
         exit(1);
       } else {
         if (WIFEXITED(status)) {
-          printf("WAIT Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
+          printf("Process %d terminated with status %d\n", terminated_pid, WEXITSTATUS(status));
         } else if (WIFSIGNALED(status)) {
           printf("Process %d terminated by signal %d\n", terminated_pid, WTERMSIG(status));
         } else {
