@@ -68,12 +68,9 @@ struct Event* get_event(struct ListNode* head, struct ListNode* tail, unsigned i
   struct Event* event;
   while (current != tail->next) {
     event = current->event;
-    pthread_rwlock_rdlock(&event->rwl);
     if (event->id == event_id) {
-      pthread_rwlock_unlock(&event->rwl);
       return event;
     }
-    pthread_rwlock_unlock(&event->rwl);
     current = current->next;
   }
   return NULL;
