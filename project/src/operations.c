@@ -25,7 +25,7 @@ static struct Event* get_event_with_delay(struct ListNode* head, struct ListNode
   struct timespec delay = delay_to_timespec(state_access_delay_ms);
   nanosleep(&delay, NULL);  // Should not be removed
 
-  return get_event(head, tail/*event_list*/, event_id);
+  return get_event(head, tail, event_id);
 }
 
 /// Gets the seat with the given index from the state.
@@ -133,14 +133,11 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 
   struct Event* event = get_event_with_delay(head, tail, event_id);
 
-  
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
   }
-  else {
-    printf("RESERVE | Event: %u\n", event->id);
-  }
+  
   pthread_rwlock_wrlock(&event->rwl);
   unsigned int reservation_id = ++event->reservations;
 
@@ -194,9 +191,8 @@ int ems_show(unsigned int event_id, int fd) {
   if (event == NULL) {
     fprintf(stderr, "Event not found\n");
     return 1;
-  } else {
-    printf("SHOW | Event: %u\n", event->id);
   }
+
   pthread_rwlock_rdlock(&event->rwl);
   // buffer should have enough space for seats, newlines, spaces and the null terminator:
   // unsimplified expression:

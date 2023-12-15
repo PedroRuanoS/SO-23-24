@@ -41,13 +41,7 @@ void enqueue(CommandQueue *queue, CommandArgs *cmd_args) {
     queue->tail->next = newNode;
     queue->tail = newNode;
   }
-///////////
-  QueueNode *current = queue->head;
-  while (current) {
-    printf("QueueNode: %d\n", current->cmd_args.cmd);
-    current = current->next;
-  }
-////////////
+
   pthread_cond_signal(&queue->cond);
   pthread_mutex_unlock(&queue->mutex);
 }
@@ -61,8 +55,7 @@ CommandArgs dequeue(CommandQueue *queue) {
     pthread_cond_wait(&queue->cond, &queue->mutex);
 
   }
-/////////////
-  CommandArgs cmd_args = {.cmd = CMD_EMPTY};
+  CommandArgs cmd_args;
   
   if (queue->head != NULL) {
     printf("queue head not NULL \n");
