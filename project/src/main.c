@@ -192,6 +192,11 @@ void process_file(int fd_job, int fd_out, int max_threads) {
         if (thread_id == -1) {
           ems_wait(delay);
         } else {
+          if (thread_id > max_threads) {
+            fprintf(stderr, "Invalid thread_id\n");
+            continue;
+          }
+            
           cmd_args.thread_id = thread_id;
           cmd_args.delay = delay;
           enqueue(&commandQueue, &cmd_args);
