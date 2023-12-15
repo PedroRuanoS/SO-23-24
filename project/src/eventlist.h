@@ -37,9 +37,8 @@ struct EventList* create_list();
 /// @return 0 if the node was appended successfully, 1 otherwise.
 int append_to_list(struct EventList* list, struct Event* data);
 
-/// Removes a node from the list.
-/// @param list Event list to be modified.
-/// @return 0 if the node was removed successfully, 1 otherwise.
+/// Frees all memory allocated for the list and destroys its locks.
+/// @param list Event list to be freed.
 void free_list(struct EventList* list);
 
 /// Retrieves an event in the list.

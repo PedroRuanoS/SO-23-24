@@ -16,7 +16,7 @@ typedef struct {
 } CommandArgs;
 
 typedef struct queueNode {
-  CommandArgs cmd;
+  CommandArgs cmd_args;
   struct queueNode *next;
 } QueueNode;
 
@@ -25,17 +25,32 @@ typedef struct {
   QueueNode *head;              // Head of the list
   QueueNode *tail;              // Tail of the list
   pthread_mutex_t mutex;        // Queue mutex
-  pthread_cond_t cond;          // 
-  pthread_cond_t barrier_cond;  //
+  pthread_cond_t cond;          // Condition variable
+  pthread_cond_t barrier_cond;  // Condition variable for BARRIER commmands.
   int fd;                       // File descriptor to write in.
-  bool terminate;  // Flag to signal termination
-  bool barrier_active;
-  unsigned int *thread_wait;
-} CommandQueue;
+  bool terminate;               // Flag to signal termination (No more commands to parse).
+  bool barrier_active;          // Flag to signal activation of a barrier.
+  unsigned int *thread_wait;    // Array of delays for each thread.
+} CommandQueue;   // FIFO queue
 
+/// Initializes a queue of commands.
+/// @param queue to be initialized.
+/// @param fd File descriptor to write in.
+/// @param max_threads Maximum number of threads.
 void init_queue(CommandQueue *queue, int fd, size_t max_threads);
-void enqueue(CommandQueue *queue, CommandArgs *cmd);
+
+/// Adds a command to the queue.
+/// @param queue Command queue to be modified.
+/// @param cmd Command arguments.
+void enqueue(CommandQueue *queue, CommandArgs *cmd_args);
+
+/// Retrieves a command from the queue.
+/// @param queue Command queue to be modified.
+/// @return Command arguments.
 CommandArgs dequeue(CommandQueue *queue);
+
+/// Frees all memory allocated for the queue and destroys its mutex and condition variables.
+/// @param queue to be freed.
 void free_queue(CommandQueue *queue);
 
 #endif  // COMMAND_QUEUE_H

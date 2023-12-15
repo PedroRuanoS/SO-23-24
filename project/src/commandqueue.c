@@ -17,12 +17,12 @@ void init_queue(CommandQueue *queue, int fd, size_t max_threads) {
     exit(1);
   }
   for (size_t i = 0; i < max_threads; i++) {
-        queue->thread_wait[i] = 0;
-    }
+    queue->thread_wait[i] = 0;
+  }  
 }
 
-void enqueue(CommandQueue *queue, CommandArgs *cmd) {
-  printf("Enqueue | Command: %d | Fd: %d\n", cmd->cmd, queue->fd);
+void enqueue(CommandQueue *queue, CommandArgs *cmd_args) {
+  printf("Enqueue | Command: %d | Fd: %d\n", cmd_args->cmd, queue->fd);
   
   pthread_mutex_lock(&queue->mutex);
 
@@ -32,7 +32,7 @@ void enqueue(CommandQueue *queue, CommandArgs *cmd) {
     exit(1);
   }
 
-  newNode->cmd = *cmd;
+  newNode->cmd_args = *cmd_args;
   newNode->next = NULL;
 
   if (queue->tail == NULL) {
@@ -44,7 +44,7 @@ void enqueue(CommandQueue *queue, CommandArgs *cmd) {
 ///////////
   QueueNode *current = queue->head;
   while (current) {
-    printf("QueueNode: %d\n", current->cmd.cmd);
+    printf("QueueNode: %d\n", current->cmd_args.cmd);
     current = current->next;
   }
 ////////////
@@ -68,7 +68,7 @@ CommandArgs dequeue(CommandQueue *queue) {
     printf("queue head not NULL \n");
 
     QueueNode *temp = queue->head;
-    cmd_args = temp->cmd;
+    cmd_args = temp->cmd_args;
 
     printf("cmd: %d\n", cmd_args.cmd);
 
