@@ -174,7 +174,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 }
 
 int ems_show(int out_fd, unsigned int event_id) {
-  if (event_list == NULL) {
+  if (event_list == NULL) { //pq é q não bloqueiam aqui??
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
   }

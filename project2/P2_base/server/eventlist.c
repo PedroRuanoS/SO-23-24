@@ -15,6 +15,7 @@ struct EventList* create_list() {
   return list;
 }
 
+// faltam os locks??
 int append_to_list(struct EventList* list, struct Event* event) {
   if (!list) return 1;
 
@@ -35,6 +36,7 @@ int append_to_list(struct EventList* list, struct Event* event) {
   return 0;
 }
 
+// destroys?
 static void free_event(struct Event* event) {
   if (!event) return;
   free(event->data);
