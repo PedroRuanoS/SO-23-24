@@ -229,7 +229,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   return 0;
 }
 
-int ems_list_events(int out_fd) {
+int ems_list_events(size_t *num_events, unsigned int *ids) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -244,32 +244,15 @@ int ems_list_events(int out_fd) {
   struct ListNode* current = event_list->head;
 
   if (current == NULL) {
-    char buff[] = "No events\n";
-    if (print_str(out_fd, buff)) {
-      perror("Error writing to file descriptor");
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
-
+    *num_events = 0;
     pthread_rwlock_unlock(&event_list->rwl);
     return 0;
   }
 
-  while (1) {
-    char buff[] = "Event: ";
-    if (print_str(out_fd, buff)) {
-      perror("Error writing to file descriptor");
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
+  *num_events = 0;
 
-    char id[16];
-    sprintf(id, "%u\n", (current->event)->id);
-    if (print_str(out_fd, id)) {
-      perror("Error writing to file descriptor");
-      pthread_rwlock_unlock(&event_list->rwl);
-      return 1;
-    }
+  while (1) {
+    ids[(*num_events)++] = (current->event)->id;
 
     if (current == to) {
       break;

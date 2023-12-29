@@ -126,7 +126,7 @@ int main(int argc, char* argv[]) {
     char op_buffer[sizeof(char) + sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + 
                   2 * MAX_RESERVATION_SIZE * sizeof(size_t) + 1];
     ssize_t op_bytes_read = read(new_client.req_pipe, op_buffer, sizeof(buffer)); 
-    op_code = op_buffer[0];
+    int op_code = op_buffer[0];
     unsigned int event_id;
     unsigned int *seats, *ids;
     size_t num_rows, num_cols, num_seats, num_events;
