@@ -147,7 +147,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  memcpy(&response, resp_message[0], sizeof(int)); // store the response
+  memcpy(&response, resp_message[0], sizeof(response)); // store the response
   if (response) {
     fprintf(stderr, "Create failed\n");
     return 1;
