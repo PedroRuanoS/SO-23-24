@@ -94,7 +94,10 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   ssize_t ret = read(resp_pipe, buffer, sizeof(int));
 
   // sizeof(int) ou sizeof(buffer)?
-  if (ret != sizeof(buffer)) { // ou while até receber o inteiro?
+  if (ret == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (ret != sizeof(buffer)) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -142,7 +145,10 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   ssize_t ret = read(resp_pipe, resp_message, sizeof(int));
 
   // sizeof(int) ou sizeof(buffer)?
-  if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
+  if (ret == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -183,7 +189,10 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   ssize_t ret = read(resp_pipe, resp_message, sizeof(int));
 
   // sizeof(int) ou sizeof(buffer)?
-  if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
+  if (ret == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -216,7 +225,10 @@ int ems_show(int out_fd, unsigned int event_id) {
   char resp_message[sizeof(int) + sizeof(size_t)*(2 + MAX_RESERVATION_SIZE) + 1];
   ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
   
-  if (bytes_read != sizeof(resp_message)) {
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read != sizeof(resp_message)) {
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -285,7 +297,10 @@ int ems_list_events(int out_fd) {
   char resp_message[sizeof(int) + sizeof(size_t) + sizeof(unsigned int)*(256)/* *max events? */ + 1];
   ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
   
-  if (bytes_read != sizeof(resp_message)) {
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read != sizeof(resp_message)) {
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }

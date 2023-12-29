@@ -175,10 +175,10 @@ int main(int argc, char* argv[]) {
           return 1;
         }
 
-        offset = snprintf(show_message, sizeof(show_message), "%d%zu%zu", 
+        offset = snprintf(show_message, show_message_size, "%d%zu%zu", 
                           response, num_rows, num_cols);
-        for (int i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(show_message + offset, sizeof(show_message) - offset, "%u", seats[i]);
+        for (size_t i = 0; i < num_rows * num_cols; i++) {
+          offset += snprintf(show_message + offset, show_message_size - (size_t)offset, "%u", seats[i]);
         }
         free(seats);
         if (print_str(new_client.resp_pipe, show_message)) {
@@ -196,9 +196,9 @@ int main(int argc, char* argv[]) {
           return 1;
         }
 
-        offset = snprintf(list_message, sizeof(list_message), "%d%zu", response, num_events);
-        for (int i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(list_message + offset, sizeof(list_message) - offset, "%u", ids[i]);
+        offset = snprintf(list_message, list_message_size, "%d%zu", response, num_events);
+        for (size_t i = 0; i < num_rows * num_cols; i++) {
+          offset += snprintf(list_message + offset, list_message_size - (size_t)offset, "%u", ids[i]);
         }
         free(ids);
         if (print_str(new_client.resp_pipe, list_message)) {

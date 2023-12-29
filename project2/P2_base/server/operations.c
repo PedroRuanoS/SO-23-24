@@ -239,7 +239,7 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
   }
 
   *num_events = 0;
-  int ids_size = 256;
+  unsigned int ids_size = 256;
   ids = (unsigned int*)malloc(ids_size*sizeof(unsigned int));
 
   if (ids == NULL) {
@@ -248,7 +248,7 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
   }
 
   while (1) {
-    if (num_events > ids_size) {
+    if (*num_events > ids_size) {
       ids_size *= 2;
       ids = (unsigned int*)realloc(ids, ids_size*sizeof(unsigned int));
 
