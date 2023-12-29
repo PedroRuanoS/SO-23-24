@@ -210,7 +210,6 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
 
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
-      char buffer[16];
       seats[i*(*num_cols) + j] = event->data[seat_index(event, i, j)];
     }
   }
@@ -240,8 +239,25 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
   }
 
   *num_events = 0;
+  int ids_size = 256;
+  ids = (unsigned int*)malloc(ids_size*sizeof(unsigned int));
+
+  if (ids == NULL) {
+    fprintf(stderr, "Memory allocation failed\n");
+    return 1;
+  }
 
   while (1) {
+    if (num_events > ids_size) {
+      ids_size *= 2;
+      ids = (unsigned int*)realloc(ids, ids_size*sizeof(unsigned int));
+
+      if (ids == NULL) {
+        fprintf(stderr, "Memory allocation failed\n");
+        return 1;
+      }
+    }
+
     ids[(*num_events)++] = (current->event)->id;
 
     if (current == to) {
@@ -250,6 +266,8 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
 
     current = current->next;
   }
+  // readjust the size of the array
+  ids = (unsigned int*)realloc(ids, (*num_events)*sizeof(unsigned int));
 
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;
