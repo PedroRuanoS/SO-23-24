@@ -124,7 +124,7 @@ int main(int argc, char* argv[]) {
   int quit = 0;
   while (1) {
     char op_buffer[sizeof(char) + sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + 
-                  2 * MAX_RESERVATION_SIZE * sizeof(size_t) + 1];
+      2 * MAX_RESERVATION_SIZE * sizeof(size_t) + 1];
     ssize_t op_bytes_read = read(new_client.req_pipe, op_buffer, sizeof(buffer)); 
     int op_code = op_buffer[0];
     unsigned int event_id;
@@ -145,7 +145,7 @@ int main(int argc, char* argv[]) {
         memcpy(&num_cols, &op_buffer[14], sizeof(num_cols));
 
         if (print_uint(new_client.resp_pipe, (unsigned int) ems_create(event_id, num_rows, num_cols))) {
-          perror("");
+          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
           return 1;
         }  
         break;
@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
         memcpy(&ys, &op_buffer[14 + num_seats * sizeof(size_t)], num_seats * sizeof(size_t));
 
         if (print_uint(new_client.resp_pipe, (unsigned int) ems_reserve(event_id, num_seats, xs, ys))) {
-          perror("");
+          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
           return 1;
         }       
         break;
@@ -166,7 +166,7 @@ int main(int argc, char* argv[]) {
       case '5':
         //use pos??
         memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-        response = 0; //ems_show(event_id, &num_rows, &num_cols, seats);
+        response = ems_show(event_id, &num_rows, &num_cols, seats);
         size_t show_message_size = sizeof(int) + sizeof(size_t) + sizeof(size_t) + 
           sizeof(unsigned int) * num_rows * num_cols + 1;
         char *show_message = malloc(show_message_size);
@@ -180,14 +180,15 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < num_rows * num_cols; i++) {
           offset += snprintf(show_message + offset, sizeof(show_message) - offset, "%u", seats[i]);
         }
+        free(seats);
         if (print_str(new_client.resp_pipe, show_message)) {
-          perror("");
+          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
           return 1;
         }
         break;
 
       case '6':
-        response = 0; //ems_list_events(&num_events, ids);
+        response = ems_list_events(&num_events, ids);
         size_t list_message_size = sizeof(int) + sizeof(size_t) + sizeof(unsigned int)* num_events;
         char *list_message = malloc(list_message_size);
         if (list_message == NULL) {
@@ -199,8 +200,9 @@ int main(int argc, char* argv[]) {
         for (int i = 0; i < num_rows * num_cols; i++) {
           offset += snprintf(list_message + offset, sizeof(list_message) - offset, "%u", ids[i]);
         }
+        free(ids);
         if (print_str(new_client.resp_pipe, list_message)) {
-          perror("");
+          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
           return 1;
         }
         break;
