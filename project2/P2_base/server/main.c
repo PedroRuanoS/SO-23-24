@@ -126,59 +126,66 @@ int main(int argc, char* argv[]) {
     char op_buffer[sizeof(char) + sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + 
       2 * MAX_RESERVATION_SIZE * sizeof(size_t) + 1];
     ssize_t op_bytes_read = read(new_client.req_pipe, op_buffer, sizeof(buffer)); 
-    int op_code = op_buffer[0];
-    unsigned int event_id;
-    unsigned int *seats, *ids;
-    size_t num_rows, num_cols, num_seats, num_events;
-    size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-    int offset = 0, response = 0;
-    switch (op_code) {
-      case '2':
-        //TODO: clear session_id
-        quit = 1; 
-        break;
+    if (op_bytes_read == 0) {
+      fprintf(stderr, "Responses pipe closed\n");
+      exit(EXIT_FAILURE);
+    } else if (op_bytes_read == -1) {
+      fprintf(stderr, "Read failed: %s\n", strerror(errno));
+      exit(EXIT_FAILURE);
+    } else {
+      int op_code = op_buffer[0];
+      unsigned int event_id;
+      unsigned int *seats, *ids;
+      size_t num_rows, num_cols, num_seats, num_events;
+      size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+      int offset = 0, response = 0;
+      switch (op_code) {
+        case '2':
+          //TODO: clear session_id
+          quit = 1; 
+          break;
 
-      case '3':
-        //use pos??
-        memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-        memcpy(&num_rows, &op_buffer[6], sizeof(num_rows));
-        memcpy(&num_cols, &op_buffer[14], sizeof(num_cols));
+        case '3':
+          //use pos??
+          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
+          memcpy(&num_rows, &op_buffer[6], sizeof(num_rows));
+          memcpy(&num_cols, &op_buffer[14], sizeof(num_cols));
 
-        if (print_uint(new_client.resp_pipe, (unsigned int) ems_create(event_id, num_rows, num_cols))) {
-          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-          return 1;
-        }  
-        break;
+          if (print_uint(new_client.resp_pipe, (unsigned int) ems_create(event_id, num_rows, num_cols))) {
+            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+            return 1;
+          }  
+          break;
 
-      case '4':
-        //use pos??
-        memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-        memcpy(&num_seats, &op_buffer[6], sizeof(num_seats));
-        memcpy(&xs, &op_buffer[14], num_seats * sizeof(size_t));
-        memcpy(&ys, &op_buffer[14 + num_seats * sizeof(size_t)], num_seats * sizeof(size_t));
+        case '4':
+          //use pos??
+          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
+          memcpy(&num_seats, &op_buffer[6], sizeof(num_seats));
+          memcpy(&xs, &op_buffer[14], num_seats * sizeof(size_t));
+          memcpy(&ys, &op_buffer[14 + num_seats * sizeof(size_t)], num_seats * sizeof(size_t));
 
-        if (print_uint(new_client.resp_pipe, (unsigned int) ems_reserve(event_id, num_seats, xs, ys))) {
-          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-          return 1;
-        }       
-        break;
+          if (print_uint(new_client.resp_pipe, (unsigned int) ems_reserve(event_id, num_seats, xs, ys))) {
+            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+            return 1;
+          }       
+          break;
 
-      case '5':
-        //use pos??
-        memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-        response = ems_show(event_id, &num_rows, &num_cols, seats);
-        size_t show_message_size = sizeof(int) + sizeof(size_t) + sizeof(size_t) + 
-          sizeof(unsigned int) * num_rows * num_cols + 1;
-        char *show_message = malloc(show_message_size);
-        if (show_message == NULL) {
-          perror("Memory allocation failed");
-          return 1;
-        }
+        case '5':
+          //use pos??
+          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
+          response = ems_show(event_id, &num_rows, &num_cols, seats);
+          size_t show_message_size = sizeof(int) + sizeof(size_t) + sizeof(size_t) + 
+            sizeof(unsigned int) * num_rows * num_cols + 1;
+          char *show_message = malloc(show_message_size);
+          if (show_message == NULL) {
+            perror("Memory allocation failed");
+            return 1;
+          }
 
         offset = snprintf(show_message, show_message_size, "%d%zu%zu", 
                           response, num_rows, num_cols);
         for (size_t i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(show_message + offset, show_message_size - (size_t)offset, "%u", seats[i]);
+          offset += snprintf(show_message + offset, show_message_size - (size_t) offset, "%u", seats[i]);
         }
         free(seats);
         if (print_str(new_client.resp_pipe, show_message)) {
@@ -187,18 +194,18 @@ int main(int argc, char* argv[]) {
         }
         break;
 
-      case '6':
-        response = ems_list_events(&num_events, ids);
-        size_t list_message_size = sizeof(int) + sizeof(size_t) + sizeof(unsigned int)* num_events;
-        char *list_message = malloc(list_message_size);
-        if (list_message == NULL) {
-          perror("Memory allocation failed");
-          return 1;
-        }
+        case '6':
+          response = ems_list_events(&num_events, ids);
+          size_t list_message_size = sizeof(int) + sizeof(size_t) + sizeof(unsigned int)* num_events;
+          char *list_message = malloc(list_message_size);
+          if (list_message == NULL) {
+            perror("Memory allocation failed");
+            return 1;
+          }
 
         offset = snprintf(list_message, list_message_size, "%d%zu", response, num_events);
         for (size_t i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(list_message + offset, list_message_size - (size_t)offset, "%u", ids[i]);
+          offset += snprintf(list_message + offset, list_message_size - (size_t) offset, "%u", ids[i]);
         }
         free(ids);
         if (print_str(new_client.resp_pipe, list_message)) {
