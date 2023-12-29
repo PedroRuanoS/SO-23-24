@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
       new_client.req_pipe = open(req_pipe_path, O_RDONLY);
       if (new_client.req_pipe == -1) {
         fprintf(stderr, "open failed: %s\n", strerror(errno));
-        return 1;
+        exit(EXIT_FAILURE);
       }
 
       // Open responses pipe for writing
@@ -104,11 +104,14 @@ int main(int argc, char* argv[]) {
       new_client.resp_pipe = open(resp_pipe_path, O_WRONLY);
       if (new_client.req_pipe == -1) {
         fprintf(stderr, "open failed: %s\n", strerror(errno));
-        return 1;
+        exit(EXIT_FAILURE);
       }
 
       // Respond to the client with the corresponding session id
-      print_str(new_client.resp_pipe, (char*)new_client.session_id);
+      if (print_str(new_client.resp_pipe, (char*)new_client.session_id)) {
+        fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
+        exit(EXIT_FAILURE); // ver pergunta 100 no piazza
+      }
     }
 
     //TODO: Write new client to the producer-consumer buffer
