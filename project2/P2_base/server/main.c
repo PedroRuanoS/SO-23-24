@@ -213,12 +213,11 @@ int main(int argc, char* argv[]) {
           return 1;
         }
         break;
+      }
     }
-
     if (quit)
       break;
   }
-
   //TODO: Close Server
   close(reg_server);
 
