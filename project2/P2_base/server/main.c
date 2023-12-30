@@ -67,6 +67,8 @@ int main(int argc, char* argv[]) {
     fprintf(stderr, "open failed: %s\n", strerror(errno));
     exit(EXIT_FAILURE);
   }
+
+  printf("Server opened register pipe\n");
   
   // por esta linha dentro do while quando tivermos multiplas sessoes
   Client new_client = {.session_id = 0}; // alterar lógica de criação do session id
@@ -81,7 +83,7 @@ int main(int argc, char* argv[]) {
     } else if (bytes_read == -1) {
       fprintf(stderr, "read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
-    } else if (bytes_read == sizeof(buffer)) {
+    } else {
       char op_code = buffer[0];
       char req_pipe_path[40];
       char resp_pipe_path[40];
@@ -96,13 +98,19 @@ int main(int argc, char* argv[]) {
         resp_pipe_path[i] = buffer[i+41];
       }
 
+      printf("Server stuck opening request pipe\n");
+
       // Open requests pipe for reading
       // This waits for the client to open it for writing
+      puts(req_pipe_path);
+
       new_client.req_pipe = open(req_pipe_path, O_RDONLY);
       if (new_client.req_pipe == -1) {
         fprintf(stderr, "open failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
       }
+
+      printf("Server opened request pipe\n");
 
       // Open responses pipe for writing
       // This waits for the client to open it for reading
@@ -112,6 +120,8 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
       }
 
+      printf("Server opened responses pipe\n");
+
       // Respond to the client with the corresponding session id
       char buff[4];
       sprintf(buff, "%d", new_client.session_id);
@@ -120,6 +130,8 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE); // ver pergunta 100 no piazza
       }
     }
+
+    printf("Server bytes read: %zu\n", bytes_read);
 
     //TODO: Write new client to the producer-consumer buffer
   //}
@@ -194,7 +206,7 @@ int main(int argc, char* argv[]) {
             }
             free(seats);
           }
-          
+
           if (print_str(new_client.resp_pipe, show_message)) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;

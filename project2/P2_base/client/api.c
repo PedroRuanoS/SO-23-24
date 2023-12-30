@@ -60,6 +60,8 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
+  printf("Client opened register pipe\n");
+
   const char OP_CODE = '1'; // letra maiuscula?
   char req_path[40];
   char resp_path[40];
@@ -69,19 +71,26 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   fill_str(resp_path, sizeof(resp_path), resp_pipe_path);
   snprintf(req_message, 82, "%c%s%s", OP_CODE, req_path, resp_path);
   
+  puts(req_message);
   // Send the register request to the server
-  if (print_str(reg_client, req_message)) { 
+  if (print_str(reg_client, req_message)) {
     fprintf(stderr, "Error writing to register pipe: %s\n", strerror(errno));
     return 1;
   } 
+
+  printf("Client stuck opening request pipe\n");
   
   // Open requests pipe for writing
   // This waits for the server to open it for reading
   req_pipe = open(req_pipe_path, O_WRONLY);
+  
+  puts(req_pipe_path); /////////////////
   if (req_pipe == -1) {
     fprintf(stderr, "open failed: %s\n", strerror(errno));
     return 1;
   }
+
+  printf("Client opened request pipe\n");
 
   // Open responses pipe for reading
   // This waits for the server to open it for writing
@@ -91,6 +100,8 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
+  printf("Client opened responses pipe\n");
+
   // Obtain the response from the server with the session id
   char buffer[sizeof(int) + 1]; // é preciso o +1 neste caso?
   ssize_t ret = read(resp_pipe, buffer, sizeof(int));
@@ -99,7 +110,7 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (ret != sizeof(buffer)) { // ou while até receber o inteiro?
+  } else if (ret == -1) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -150,7 +161,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
+  } else if (ret == -1) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -194,7 +205,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (ret != sizeof(resp_message)) { // ou while até receber o inteiro?
+  } else if (ret == -1) { // ou while até receber o inteiro?
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -230,7 +241,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (bytes_read != sizeof(resp_message)) {
+  } else if (bytes_read == -1) {
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -302,7 +313,7 @@ int ems_list_events(int out_fd) {
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (bytes_read != sizeof(resp_message)) {
+  } else if (bytes_read == -1) {
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
