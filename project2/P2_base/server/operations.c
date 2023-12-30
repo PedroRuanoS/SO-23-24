@@ -250,12 +250,15 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
   while (1) {
     if (*num_events > ids_size) {
       ids_size *= 2;
-      ids = (unsigned int*)realloc(ids, ids_size*sizeof(unsigned int));
+      unsigned int *temp = (unsigned int*)realloc(ids, ids_size*sizeof(unsigned int));
 
-      if (ids == NULL) {
-        fprintf(stderr, "Memory allocation failed\n");
+      if (temp == NULL) {
+        fprintf(stderr, "Memory reallocation failed\n");
+        free(ids);
         return 1;
       }
+
+      ids = temp;
     }
 
     ids[(*num_events)++] = (current->event)->id;
@@ -267,7 +270,15 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
     current = current->next;
   }
   // readjust the size of the array
-  ids = (unsigned int*)realloc(ids, (*num_events)*sizeof(unsigned int));
+  unsigned int *temp = (unsigned int*)realloc(ids, (*num_events)*sizeof(unsigned int));
+
+  if (temp == NULL) {
+    fprintf(stderr, "Memory reallocation failed\n");
+    free(ids);
+    return 1;
+  }
+  
+  ids = temp;
 
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;

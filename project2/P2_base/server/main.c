@@ -113,7 +113,9 @@ int main(int argc, char* argv[]) {
       }
 
       // Respond to the client with the corresponding session id
-      if (print_str(new_client.resp_pipe, (char*)new_client.session_id)) {
+      char buff[4];
+      sprintf(buff, "%d", new_client.session_id);
+      if (print_str(new_client.resp_pipe, buff)) {
         fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
         exit(EXIT_FAILURE); // ver pergunta 100 no piazza
       }
@@ -135,7 +137,7 @@ int main(int argc, char* argv[]) {
     } else {
       int op_code = op_buffer[0];
       unsigned int event_id;
-      unsigned int *seats, *ids;
+      unsigned int *seats = NULL, *ids = NULL;
       size_t num_rows, num_cols, num_seats, num_events;
       size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
       int offset = 0, response = 0;
@@ -182,17 +184,21 @@ int main(int argc, char* argv[]) {
             return 1;
           }
 
-        offset = snprintf(show_message, show_message_size, "%d%zu%zu", 
-                          response, num_rows, num_cols);
-        for (size_t i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(show_message + offset, show_message_size - (size_t) offset, "%u", seats[i]);
-        }
-        free(seats);
-        if (print_str(new_client.resp_pipe, show_message)) {
-          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-          return 1;
-        }
-        break;
+          if (response) {
+            snprintf(show_message, show_message_size, "%d", response);
+          } else {
+            offset = snprintf(show_message, show_message_size, "%d%zu%zu", 
+                            response, num_rows, num_cols);
+            for (size_t i = 0; i < num_rows * num_cols; i++) {
+              offset += snprintf(show_message + offset, show_message_size - (size_t) offset, "%u", seats[i]);
+            }
+            free(seats);
+          }
+          if (print_str(new_client.resp_pipe, show_message)) {
+            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+            return 1;
+          }
+          break;
 
         case '6':
           response = ems_list_events(&num_events, ids);
@@ -203,16 +209,21 @@ int main(int argc, char* argv[]) {
             return 1;
           }
 
-        offset = snprintf(list_message, list_message_size, "%d%zu", response, num_events);
-        for (size_t i = 0; i < num_rows * num_cols; i++) {
-          offset += snprintf(list_message + offset, list_message_size - (size_t) offset, "%u", ids[i]);
-        }
-        free(ids);
-        if (print_str(new_client.resp_pipe, list_message)) {
-          fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-          return 1;
-        }
-        break;
+          if (response) {
+            snprintf(show_message, show_message_size, "%d", response);
+          } else {
+            offset = snprintf(list_message, list_message_size, "%d%zu", response, num_events);
+            for (size_t i = 0; i < num_rows * num_cols; i++) {
+              offset += snprintf(list_message + offset, list_message_size - (size_t) offset, "%u", ids[i]);
+            }
+            free(ids);
+          }
+
+          if (print_str(new_client.resp_pipe, list_message)) {
+            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+            return 1;
+          }
+          break;
       }
     }
     if (quit)
