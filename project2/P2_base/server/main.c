@@ -194,6 +194,7 @@ int main(int argc, char* argv[]) {
             }
             free(seats);
           }
+          
           if (print_str(new_client.resp_pipe, show_message)) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;

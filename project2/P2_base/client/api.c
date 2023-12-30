@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
+#include <sys/stat.h>
 
 #include "api.h"
 #include "common/io.h"
@@ -14,12 +16,12 @@ static int reg_client;
 
 static int session_id;
 
-void fill_str(char result_array[], const char *str) {
+void fill_str(char result_array[], size_t size, const char *str) {
   strcpy(result_array, str);
   
   // Fill the remaining positions with '\0' characters
   size_t len = strlen(str);
-  for (size_t i = len; i < sizeof(result_array); ++i) {
+  for (size_t i = len; i < size; ++i) {
     result_array[i] = '\0';
   }
 }
@@ -63,8 +65,8 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   char resp_path[40];
   char req_message[82];
 
-  fill_str(req_path, req_pipe_path);
-  fill_str(resp_path, resp_pipe_path);
+  fill_str(req_path, sizeof(req_path), req_pipe_path);
+  fill_str(resp_path, sizeof(resp_path), resp_pipe_path);
   snprintf(req_message, 82, "%c%s%s", OP_CODE, req_path, resp_path);
   
   // Send the register request to the server
@@ -102,7 +104,7 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
-  memcpy(&session_id, buffer[0], sizeof(int)); // store the session id
+  memcpy(&session_id, &buffer[0], sizeof(int)); // store the session id
 
   return 0;
 }
@@ -153,7 +155,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  memcpy(&response, resp_message[0], sizeof(int)); // store the response
+  memcpy(&response, &resp_message[0], sizeof(int)); // store the response
   if (response) {
     fprintf(stderr, "Create failed\n");
     return 1;
@@ -170,11 +172,11 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   int bytes_written = snprintf(req_message, sizeof(req_message), "%c%d%u%zu", OP_CODE, session_id, event_id, num_seats);
 
   for (size_t i = 0; i < num_seats; i++) {
-    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - bytes_written, "%zu", xs[i]);
+    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - (size_t)bytes_written, "%zu", xs[i]);
   }
 
   for (size_t i = 0; i < num_seats; i++) {
-    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - bytes_written, "%zu", ys[i]);
+    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - (size_t)bytes_written, "%zu", ys[i]);
   }
 
   // Send a reserve request to the server
@@ -197,7 +199,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     return 1;
   }
 
-  memcpy(&response, resp_message[0], sizeof(int)); // store the response
+  memcpy(&response, &resp_message[0], sizeof(int)); // store the response
   if (response) {
     fprintf(stderr, "Reserve failed\n");
     return 1;
@@ -220,7 +222,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   }
 
   // COMPLETE
-  int pos = 0;
+  long unsigned int pos = 0;
   int response;
   char resp_message[sizeof(int) + sizeof(size_t)*(2 + MAX_RESERVATION_SIZE) + 1];
   ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
@@ -233,7 +235,7 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  memcpy(&response, resp_message[pos], sizeof(int)); // store the response MUDAR NOME
+  memcpy(&response, &resp_message[pos], sizeof(int)); // store the response MUDAR NOME
   pos += 4;
 
   if (response) {
@@ -243,13 +245,13 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   size_t num_rows;
   size_t num_cols;
-  memcpy(&num_rows, resp_message[pos], sizeof(size_t));
+  memcpy(&num_rows, &resp_message[pos], sizeof(size_t));
   pos += sizeof(size_t);
-  memcpy(&num_cols, resp_message[pos], sizeof(size_t));
+  memcpy(&num_cols, &resp_message[pos], sizeof(size_t));
   pos += sizeof(size_t);
 
   size_t seats[num_rows*num_cols];
-  memcpy(&seats, resp_message[pos], num_rows*num_cols);
+  memcpy(&seats, &resp_message[pos], num_rows*num_cols);
 
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
@@ -292,7 +294,7 @@ int ems_list_events(int out_fd) {
   }
 
   // COMPLETE
-  int pos = 0;
+  long unsigned int pos = 0;
   int response;
   char resp_message[sizeof(int) + sizeof(size_t) + sizeof(unsigned int)*(256)/* *max events? */ + 1];
   ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
@@ -305,7 +307,7 @@ int ems_list_events(int out_fd) {
     return 1;
   }
 
-  memcpy(&response, resp_message[pos], sizeof(int)); // store the response MUDAR NOME
+  memcpy(&response, &resp_message[pos], sizeof(int)); // store the response MUDAR NOME
   pos += 4;
 
   if (response) {
@@ -314,7 +316,7 @@ int ems_list_events(int out_fd) {
   }
 
   size_t num_events;
-  memcpy(&num_events, resp_message[pos], sizeof(size_t));
+  memcpy(&num_events, &resp_message[pos], sizeof(size_t));
   pos += sizeof(size_t);
 
   if (num_events == 0) {
@@ -327,9 +329,9 @@ int ems_list_events(int out_fd) {
   }
 
   unsigned int ids[num_events];
-  memcpy(&ids, resp_message[pos], num_events);
+  memcpy(&ids, &resp_message[pos], num_events);
 
-  for (int i = 0; i < num_events; i++) {
+  for (size_t i = 0; i < num_events; i++) {
     char buff[] = "Event: ";
 
     if (print_str(out_fd, buff)) {
