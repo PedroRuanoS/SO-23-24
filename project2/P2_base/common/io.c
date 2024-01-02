@@ -39,11 +39,6 @@ int parse_uint(int fd, unsigned int *value, char *next) {
   return 0;
 }
 
-//FIX ME: print_int
-//FIX ME: print_sizet
-//FIX ME: print_uint_array
-//FIX ME: print_sizet_array
-
 int print_uint(int fd, unsigned int value) {
   char buffer[16];
   size_t i = 16;
@@ -81,4 +76,44 @@ int print_str(int fd, const char *str) {
   }
 
   return 0;
+}
+
+int write_int(int fd, int value) {
+    ssize_t written = write(fd, &value, sizeof(int));
+    if (written == -1) {
+        return 1;
+    }
+    return 0;
+}
+
+int write_sizet(int fd, size_t value) {
+    ssize_t written = write(fd, &value, sizeof(size_t));
+    if (written == -1) {
+        return 1;
+    }
+    return 0;
+}
+
+int write_uint_array(int fd, unsigned int *array, size_t length) {
+    ssize_t written = write(fd, array, sizeof(unsigned int) * length);
+    if (written == -1) {
+        return 1;
+    }
+    return 0;
+}
+
+int write_sizet_array(int fd, size_t *array, size_t length) {
+    ssize_t written = write(fd, array, sizeof(size_t) * length);
+    if (written == -1) {
+        return 1;
+    }
+    return 0;
+}
+
+int write_uint(int fd, unsigned int value) {
+    ssize_t written = write(fd, &value, sizeof(unsigned int));
+    if (written == -1) {
+        return 1;
+    }
+    return 0;
 }

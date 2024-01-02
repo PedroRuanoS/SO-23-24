@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
       printf("Server opened responses pipe\n");
 
       // Respond to the client with the corresponding session id
-      if (print_int(new_client.resp_pipe, new_client.session_id)) {
+      if (write_int(new_client.resp_pipe, new_client.session_id)) {
         fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
         exit(EXIT_FAILURE); // ver pergunta 100 no piazza
       }
@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
           num_rows = num_rc[0];
           num_cols = num_rc[1];
 
-          if (print_int(new_client.resp_pipe, ems_create(event_id, num_rows, num_cols))) {
+          if (write_int(new_client.resp_pipe, ems_create(event_id, num_rows, num_cols))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;
           }  
@@ -275,7 +275,7 @@ int main(int argc, char* argv[]) {
             ys[i] = xys[i + num_seats];
           }
 
-          if (print_int(new_client.resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
+          if (write_int(new_client.resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;
           }       
@@ -305,15 +305,15 @@ int main(int argc, char* argv[]) {
           response = ems_show(event_id, &num_rows, &num_cols, seats);
           
           if (response) {
-            if (print_int(new_client.resp_pipe, response)) {
+            if (write_int(new_client.resp_pipe, response)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
             }       
           } else {
             num_rc[0] = num_rows;
             num_rc[1] = num_cols;
-            if (print_int(new_client.resp_pipe, response) || print_sizet_array(new_client.resp_pipe, num_rc)
-                || print_uint_array(new_client.resp_pipe, seats)) {
+            if (write_int(new_client.resp_pipe, response) || write_sizet_array(new_client.resp_pipe, num_rc, 2)
+                || write_uint_array(new_client.resp_pipe, seats, num_rows*num_cols)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
             }
@@ -334,13 +334,13 @@ int main(int argc, char* argv[]) {
           response = ems_list_events(&num_events, ids);
 
           if (response) {
-            if (print_int(new_client.resp_pipe, response)) {
+            if (write_int(new_client.resp_pipe, response)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
             } 
           } else {
-            if (print_int(new_client.resp_pipe, response) || print_sizet(new_client.resp_pipe, num_events) 
-                || print_uint_array(new_client.resp_pipe, ids)) {
+            if (write_int(new_client.resp_pipe, response) || write_sizet(new_client.resp_pipe, num_events) 
+                || write_uint_array(new_client.resp_pipe, ids, num_events)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
             } 
