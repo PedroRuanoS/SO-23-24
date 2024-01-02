@@ -147,7 +147,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 
   // Send a create request to the server
   if (print_str(req_pipe, OP_CODE) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
-      || write_sizet_array(req_pipe, num_rc)) {
+      || write_sizet_array(req_pipe, num_rc, 2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -199,7 +199,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
 
   // Send a reserve request to the server
   if (print_str(req_pipe, OP_CODE) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
-      || write_sizet(req_pipe, num_seats) || write_sizet_array(req_pipe, xys)) {
+      || write_sizet(req_pipe, num_seats) || write_sizet_array(req_pipe, xys, num_seats*2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
