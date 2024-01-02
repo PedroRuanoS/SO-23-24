@@ -96,17 +96,34 @@ int main(int argc, char* argv[]) {
         fprintf(stderr, "Operation code must be 1 for setup\n");
         exit(EXIT_FAILURE);
       }
-      
-      printf("Server stuck opening request pipe\n");
 
       char req_pipe_path[40];
       char resp_pipe_path[40];
-      ssize_t bytes_read2 = read(reg_server, req_pipe_path, 40*sizeof(char));
-      ssize_t bytes_read3 = read(reg_server, resp_pipe_path, 40*sizeof(char));
+      bytes_read = read(reg_server, req_pipe_path, 40*sizeof(char));
+
+      if (bytes_read == 0) {
+        fprintf(stderr, "register pipe closed\n");
+        return 1;
+      } else if (bytes_read == -1) {
+        fprintf(stderr, "Error reading from register pipe: %s\n", strerror(errno));
+        return 1;
+      }
+
+      bytes_read = read(reg_server, resp_pipe_path, 40*sizeof(char));
+
+      if (bytes_read == 0) {
+        fprintf(stderr, "register pipe closed\n");
+        return 1;
+      } else if (bytes_read == -1) {
+        fprintf(stderr, "Error reading from register pipe: %s\n", strerror(errno));
+        return 1;
+      }
 
       // Open requests pipe for reading
       // This waits for the client to open it for writing
       puts(req_pipe_path);
+
+      printf("Server stuck opening request pipe\n");
 
       new_client.req_pipe = open(req_pipe_path, O_RDONLY);
       if (new_client.req_pipe == -1) {
@@ -140,8 +157,7 @@ int main(int argc, char* argv[]) {
   int quit = 0;
   while (1) {
     char op_buffer;
-    ssize_t op_bytes_read = read(new_client.req_pipe, &op_buffer, sizeof(char)); 
-    ssize_t op_bytes_read2, op_bytes_read3, op_bytes_read4;
+    ssize_t op_bytes_read = read(new_client.req_pipe, &op_buffer, sizeof(char));
     if (op_bytes_read == 0) {
       //TODO: clear session_id
       quit = 1;
@@ -149,6 +165,7 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     } else {
+      int session_id;
       unsigned int event_id;
       unsigned int *seats = NULL, *ids = NULL;
       size_t num_rows, num_cols, num_seats, num_events, num_rc[2];
@@ -159,12 +176,50 @@ int main(int argc, char* argv[]) {
           //FIX ME: various clients
         case '2':
           //TODO: clear session_id
+          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
           quit = 1; 
           break;
 
         case '3':
-          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
-          op_bytes_read3 = read(new_client.req_pipe, num_rc, sizeof(num_rc));
+          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, num_rc, sizeof(num_rc));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
           num_rows = num_rc[0];
           num_cols = num_rc[1];
 
@@ -175,9 +230,45 @@ int main(int argc, char* argv[]) {
           break;
 
         case '4':
-          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
-          op_bytes_read3 = read(new_client.req_pipe, &num_seats, sizeof(size_t));
-          op_bytes_read4 = read(new_client.req_pipe, xys, sizeof(xys));
+          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, &num_seats, sizeof(size_t));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, xys, sizeof(xys));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
 
           for (int i = 0; i < num_seats; i++) {
             xs[i] = xys[i];
@@ -191,7 +282,26 @@ int main(int argc, char* argv[]) {
           break;
 
         case '5':
-          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
+          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+
           response = ems_show(event_id, &num_rows, &num_cols, seats);
           
           if (response) {
@@ -211,6 +321,16 @@ int main(int argc, char* argv[]) {
           break;
           
         case '6':
+          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+
+          if (op_bytes_read == 0) {
+            fprintf(stderr, "requests pipe closed\n");
+            return 1;
+          } else if (op_bytes_read == -1) {
+            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
+            return 1;
+          }
+          
           response = ems_list_events(&num_events, ids);
 
           if (response) {

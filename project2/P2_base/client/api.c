@@ -1,5 +1,4 @@
 #include <errno.h>
-#include <iterator>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -192,9 +191,15 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   }
   */
 
+  size_t xys[num_seats*2];
+  for (int i = 0; i < num_seats; i++) {
+    xys[i] = xs[i];
+    xys[i + num_seats] = ys[i];
+  }
+
   // Send a reserve request to the server
   if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id) || print_uint(req_pipe, event_id)
-      || print_sizet_array(req_pipe, num_rc)) {
+      || write_size_t(req_pipe, num_seats) || print_sizet_array(req_pipe, xys)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -203,7 +208,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   int response;
   ssize_t ret = read(resp_pipe, &response, sizeof(int));
 
-  // sizeof(int) ou sizeof(buffer)?
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
@@ -230,7 +234,6 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  // COMPLETE
   long unsigned int pos = 0;
   int response;
   ssize_t bytes_read = read(resp_pipe, &response, sizeof(int));
@@ -250,11 +253,35 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   size_t num_rows;
   size_t num_cols;
-  ssize_t bytes_read2 = read(resp_pipe, &num_rows, sizeof(size_t));
-  ssize_t bytes_read3 = read(resp_pipe, &num_cols, sizeof(size_t));
+  bytes_read = read(resp_pipe, &num_rows, sizeof(size_t));
+
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read == -1) {
+    fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
+    return 1;
+  }
+
+  bytes_read = read(resp_pipe, &num_cols, sizeof(size_t));
+
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read == -1) {
+    fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
+    return 1;
+  }
 
   size_t seats[num_rows*num_cols];
-  ssize_t bytes_read4 = read(resp_pipe, &seats, sizeof(size_t));
+  bytes_read = read(resp_pipe, &seats, sizeof(size_t));
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read == -1) {
+    fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
+    return 1;
+  }
 
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
@@ -296,7 +323,6 @@ int ems_list_events(int out_fd) {
     return 1;
   }
 
-  // COMPLETE
   long unsigned int pos = 0;
   int response;
   ssize_t bytes_read = read(resp_pipe, &response, sizeof(int));
@@ -315,7 +341,15 @@ int ems_list_events(int out_fd) {
   }
 
   size_t num_events;
-  ssize_t bytes_read2 = read(resp_pipe, &num_events, sizeof(ssize_t));
+  bytes_read = read(resp_pipe, &num_events, sizeof(ssize_t));
+
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read == -1) {
+    fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
+    return 1;
+  }
 
   if (num_events == 0) {
     char buff[] = "No events\n";
@@ -327,7 +361,15 @@ int ems_list_events(int out_fd) {
   }
 
   unsigned int ids[num_events];
-  ssize_t bytes_read3 = read(resp_pipe, ids, num_events*sizeof(unsigned int));
+  bytes_read = read(resp_pipe, ids, num_events*sizeof(unsigned int));
+
+  if (bytes_read == 0) {
+    fprintf(stderr, "responses pipe closed\n");
+    return 1;
+  } else if (bytes_read == -1) {
+    fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
+    return 1;
+  }
 
   for (size_t i = 0; i < num_events; i++) {
     char buff[] = "Event: ";
