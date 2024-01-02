@@ -39,6 +39,11 @@ int parse_uint(int fd, unsigned int *value, char *next) {
   return 0;
 }
 
+//FIX ME: print_int
+//FIX ME: print_sizet
+//FIX ME: print_uint_array
+//FIX ME: print_sizet_array
+
 int print_uint(int fd, unsigned int value) {
   char buffer[16];
   size_t i = 16;

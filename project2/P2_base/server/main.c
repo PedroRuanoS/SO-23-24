@@ -75,8 +75,10 @@ int main(int argc, char* argv[]) {
   
   //while (1) {
     //TODO: Read from pipe
-    char buffer[82];
-    ssize_t bytes_read = read(reg_server, buffer, 81);
+    //char buffer[82];
+    //ssize_t bytes_read = read(reg_server, buffer, 81);
+    char op_code;
+    ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
     if (bytes_read == 0) { // diferente neste caso como mudar?
       fprintf(stderr, "register pipe closed\n");
       exit(EXIT_FAILURE);
@@ -84,21 +86,23 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     } else {
+      /*
       char op_code = buffer[0];
       char req_pipe_path[40];
       char resp_pipe_path[40];
+      */
 
       if (op_code != '1') {
         fprintf(stderr, "Operation code must be 1 for setup\n");
         exit(EXIT_FAILURE);
       }
       
-      for (int i = 0; i < 40; i++) {
-        req_pipe_path[i] = buffer[i+1];
-        resp_pipe_path[i] = buffer[i+41];
-      }
-
       printf("Server stuck opening request pipe\n");
+
+      char req_pipe_path[40];
+      char resp_pipe_path[40];
+      ssize_t bytes_read2 = read(reg_server, req_pipe_path, 40*sizeof(char));
+      ssize_t bytes_read3 = read(reg_server, resp_pipe_path, 40*sizeof(char));
 
       // Open requests pipe for reading
       // This waits for the client to open it for writing
@@ -123,9 +127,7 @@ int main(int argc, char* argv[]) {
       printf("Server opened responses pipe\n");
 
       // Respond to the client with the corresponding session id
-      char buff[4];
-      sprintf(buff, "%d", new_client.session_id);
-      if (print_str(new_client.resp_pipe, buff)) {
+      if (print_int(new_client.resp_pipe, new_client.session_id)) {
         fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
         exit(EXIT_FAILURE); // ver pergunta 100 no piazza
       }
@@ -137,104 +139,91 @@ int main(int argc, char* argv[]) {
   //}
   int quit = 0;
   while (1) {
-    char op_buffer[sizeof(char) + sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + 
-      2 * MAX_RESERVATION_SIZE * sizeof(size_t) + 1];
-    ssize_t op_bytes_read = read(new_client.req_pipe, op_buffer, sizeof(buffer)); 
+    char op_buffer;
+    ssize_t op_bytes_read = read(new_client.req_pipe, &op_buffer, sizeof(char)); 
+    ssize_t op_bytes_read2, op_bytes_read3, op_bytes_read4;
     if (op_bytes_read == 0) {
-      fprintf(stderr, "Responses pipe closed\n");
-      exit(EXIT_FAILURE);
+      //TODO: clear session_id
+      quit = 1;
     } else if (op_bytes_read == -1) {
       fprintf(stderr, "Read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     } else {
-      int op_code = op_buffer[0];
       unsigned int event_id;
       unsigned int *seats = NULL, *ids = NULL;
-      size_t num_rows, num_cols, num_seats, num_events;
-      size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+      size_t num_rows, num_cols, num_seats, num_events, num_rc[2];
+      size_t xys[MAX_RESERVATION_SIZE*2], xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
       int offset = 0, response = 0;
-      switch (op_code) {
+      switch (op_buffer) {
+        case '1':
+          //FIX ME: various clients
         case '2':
           //TODO: clear session_id
           quit = 1; 
           break;
 
         case '3':
-          //use pos??
-          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-          memcpy(&num_rows, &op_buffer[6], sizeof(num_rows));
-          memcpy(&num_cols, &op_buffer[14], sizeof(num_cols));
+          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+          op_bytes_read3 = read(new_client.req_pipe, num_rc, sizeof(num_rc));
+          num_rows = num_rc[0];
+          num_cols = num_rc[1];
 
-          if (print_uint(new_client.resp_pipe, (unsigned int) ems_create(event_id, num_rows, num_cols))) {
+          if (print_int(new_client.resp_pipe, ems_create(event_id, num_rows, num_cols))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;
           }  
           break;
 
         case '4':
-          //use pos??
-          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
-          memcpy(&num_seats, &op_buffer[6], sizeof(num_seats));
-          memcpy(&xs, &op_buffer[14], num_seats * sizeof(size_t));
-          memcpy(&ys, &op_buffer[14 + num_seats * sizeof(size_t)], num_seats * sizeof(size_t));
+          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
+          op_bytes_read3 = read(new_client.req_pipe, &num_seats, sizeof(size_t));
+          op_bytes_read4 = read(new_client.req_pipe, xys, sizeof(xys));
 
-          if (print_uint(new_client.resp_pipe, (unsigned int) ems_reserve(event_id, num_seats, xs, ys))) {
+          for (int i = 0; i < num_seats; i++) {
+            xs[i] = xys[i];
+            ys[i] = xys[i + num_seats];
+          }
+
+          if (print_int(new_client.resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
             return 1;
           }       
           break;
 
         case '5':
-          //use pos??
-          memcpy(&event_id, &op_buffer[2], sizeof(event_id));
+          op_bytes_read2 = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
           response = ems_show(event_id, &num_rows, &num_cols, seats);
-          size_t show_message_size = sizeof(int) + sizeof(size_t) + sizeof(size_t) + 
-            sizeof(unsigned int) * num_rows * num_cols + 1;
-          char *show_message = malloc(show_message_size);
-          if (show_message == NULL) {
-            perror("Memory allocation failed");
-            return 1;
-          }
-
+          
           if (response) {
-            snprintf(show_message, show_message_size, "%d", response);
+            if (print_int(new_client.resp_pipe, response)) {
+              fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+              return 1;
+            }       
           } else {
-            offset = snprintf(show_message, show_message_size, "%d%zu%zu", 
-                            response, num_rows, num_cols);
-            for (size_t i = 0; i < num_rows * num_cols; i++) {
-              offset += snprintf(show_message + offset, show_message_size - (size_t) offset, "%u", seats[i]);
+            num_rc[0] = num_rows;
+            num_rc[1] = num_cols;
+            if (print_int(new_client.resp_pipe, response) || print_sizet_array(new_client.resp_pipe, num_rc)
+                || print_uint_array(new_client.resp_pipe, seats)) {
+              fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+              return 1;
             }
-            free(seats);
-          }
-
-          if (print_str(new_client.resp_pipe, show_message)) {
-            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-            return 1;
           }
           break;
-
+          
         case '6':
           response = ems_list_events(&num_events, ids);
-          size_t list_message_size = sizeof(int) + sizeof(size_t) + sizeof(unsigned int)* num_events;
-          char *list_message = malloc(list_message_size);
-          if (list_message == NULL) {
-            perror("Memory allocation failed");
-            return 1;
-          }
 
           if (response) {
-            snprintf(show_message, show_message_size, "%d", response);
+            if (print_int(new_client.resp_pipe, response)) {
+              fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+              return 1;
+            } 
           } else {
-            offset = snprintf(list_message, list_message_size, "%d%zu", response, num_events);
-            for (size_t i = 0; i < num_rows * num_cols; i++) {
-              offset += snprintf(list_message + offset, list_message_size - (size_t) offset, "%u", ids[i]);
-            }
-            free(ids);
-          }
-
-          if (print_str(new_client.resp_pipe, list_message)) {
-            fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-            return 1;
+            if (print_int(new_client.resp_pipe, response) || print_sizet(new_client.resp_pipe, num_events) 
+                || print_uint_array(new_client.resp_pipe, ids)) {
+              fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
+              return 1;
+            } 
           }
           break;
       }

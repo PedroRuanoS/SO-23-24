@@ -1,4 +1,6 @@
 #include <errno.h>
+#include <iterator>
+#include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -62,18 +64,15 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
 
   printf("Client opened register pipe\n");
 
-  const char OP_CODE = '1'; // letra maiuscula?
+  const char op_code = '1'; // letra maiuscula?
   char req_path[40];
   char resp_path[40];
-  char req_message[82];
 
   fill_str(req_path, sizeof(req_path), req_pipe_path);
   fill_str(resp_path, sizeof(resp_path), resp_pipe_path);
-  snprintf(req_message, 82, "%c%s%s", OP_CODE, req_path, resp_path);
   
-  puts(req_message);
   // Send the register request to the server
-  if (print_str(reg_client, req_message)) {
+  if (print_int(reg_client, op_code) || print_str(reg_client, req_path) || print_str(reg_client, resp_path)) {
     fprintf(stderr, "Error writing to register pipe: %s\n", strerror(errno));
     return 1;
   } 
@@ -124,11 +123,9 @@ int ems_quit(void) {
   //TODO: close pipes
 
   const char OP_CODE = '2';
-  char req_message[sizeof(int) + 2];
-  snprintf(req_message, sizeof(req_message), "%c%d", OP_CODE, session_id);
 
   // Send a request to the server to end this session
-  if (print_str(req_pipe, req_message)) {
+  if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -143,19 +140,23 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   //TODO: send create request to the server (through the request pipe) and wait for the response (through the response pipe)
 
   const char OP_CODE = '3';
-  char req_message[sizeof(int) + sizeof(unsigned int) + sizeof(size_t)*2 + 2];
-  snprintf(req_message, sizeof(req_message), "%c%d%u%zu%zu", OP_CODE, session_id, event_id, num_rows, num_cols);
+  size_t num_rc[2];
+  num_rc[0] = num_rows;
+  num_rc[1] = num_cols;
+  //char req_message[sizeof(int) + sizeof(unsigned int) + sizeof(size_t)*2 + 2];
+  //snprintf(req_message, sizeof(req_message), "%c%d%u%zu%zu", OP_CODE, session_id, event_id, num_rows, num_cols);
 
   // Send a create request to the server
-  if (print_str(req_pipe, req_message)) {
+  if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id) || print_uint(req_pipe, event_id)
+      || print_sizet_array(req_pipe, num_rc)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
 
   // Obtain the response from the server
   int response;
-  char resp_message[sizeof(int) + 1];
-  ssize_t ret = read(resp_pipe, resp_message, sizeof(int));
+  // char resp_message[sizeof(int) + 1];
+  ssize_t ret = read(resp_pipe, &response, sizeof(int));
 
   // sizeof(int) ou sizeof(buffer)?
   if (ret == 0) {
@@ -166,7 +167,6 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     return 1;
   }
 
-  memcpy(&response, &resp_message[0], sizeof(int)); // store the response
   if (response) {
     fprintf(stderr, "Create failed\n");
     return 1;
@@ -179,6 +179,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   //TODO: send reserve request to the server (through the request pipe) and wait for the response (through the response pipe)
 
   const char OP_CODE = '4';
+  /*
   char req_message[sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + sizeof(xs) + sizeof(ys) + 2];
   int bytes_written = snprintf(req_message, sizeof(req_message), "%c%d%u%zu", OP_CODE, session_id, event_id, num_seats);
 
@@ -189,17 +190,18 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   for (size_t i = 0; i < num_seats; i++) {
     bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - (size_t)bytes_written, "%zu", ys[i]);
   }
+  */
 
   // Send a reserve request to the server
-  if (print_str(req_pipe, req_message)) {
+  if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id) || print_uint(req_pipe, event_id)
+      || print_sizet_array(req_pipe, num_rc)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
   
   // Obtain the response from the server
   int response;
-  char resp_message[sizeof(int) + 1];
-  ssize_t ret = read(resp_pipe, resp_message, sizeof(int));
+  ssize_t ret = read(resp_pipe, &response, sizeof(int));
 
   // sizeof(int) ou sizeof(buffer)?
   if (ret == 0) {
@@ -210,7 +212,6 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
     return 1;
   }
 
-  memcpy(&response, &resp_message[0], sizeof(int)); // store the response
   if (response) {
     fprintf(stderr, "Reserve failed\n");
     return 1;
@@ -223,11 +224,8 @@ int ems_show(int out_fd, unsigned int event_id) {
   //TODO: send show request to the server (through the request pipe) and wait for the response (through the response pipe)
   
   const char OP_CODE = '5';
-  char req_message[sizeof(int) + sizeof(unsigned int) + 2];
-  snprintf(req_message, sizeof(req_message), "%c%d%u", OP_CODE, session_id, event_id);
 
-  // Send a show request to the server
-  if (print_str(req_pipe, req_message)) {
+  if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -235,8 +233,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   // COMPLETE
   long unsigned int pos = 0;
   int response;
-  char resp_message[sizeof(int) + sizeof(size_t)*(2 + MAX_RESERVATION_SIZE) + 1];
-  ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
+  ssize_t bytes_read = read(resp_pipe, &response, sizeof(int));
   
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");
@@ -246,9 +243,6 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  memcpy(&response, &resp_message[pos], sizeof(int)); // store the response MUDAR NOME
-  pos += 4;
-
   if (response) {
     fprintf(stderr, "Show failed\n");
     return 1;
@@ -256,13 +250,11 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   size_t num_rows;
   size_t num_cols;
-  memcpy(&num_rows, &resp_message[pos], sizeof(size_t));
-  pos += sizeof(size_t);
-  memcpy(&num_cols, &resp_message[pos], sizeof(size_t));
-  pos += sizeof(size_t);
+  ssize_t bytes_read2 = read(resp_pipe, &num_rows, sizeof(size_t));
+  ssize_t bytes_read3 = read(resp_pipe, &num_cols, sizeof(size_t));
 
   size_t seats[num_rows*num_cols];
-  memcpy(&seats, &resp_message[pos], num_rows*num_cols);
+  ssize_t bytes_read4 = read(resp_pipe, &seats, sizeof(size_t));
 
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
@@ -299,7 +291,7 @@ int ems_list_events(int out_fd) {
   snprintf(req_message, sizeof(req_message), "%c%d", OP_CODE, session_id);
 
   // Send a list request to the server
-  if (print_str(req_pipe, req_message)) {
+  if (print_str(req_pipe, OP_CODE) || print_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -307,8 +299,7 @@ int ems_list_events(int out_fd) {
   // COMPLETE
   long unsigned int pos = 0;
   int response;
-  char resp_message[sizeof(int) + sizeof(size_t) + sizeof(unsigned int)*(256)/* *max events? */ + 1];
-  ssize_t bytes_read = read(resp_pipe, resp_message, sizeof(resp_message));
+  ssize_t bytes_read = read(resp_pipe, &response, sizeof(int));
   
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");
@@ -318,17 +309,13 @@ int ems_list_events(int out_fd) {
     return 1;
   }
 
-  memcpy(&response, &resp_message[pos], sizeof(int)); // store the response MUDAR NOME
-  pos += 4;
-
   if (response) {
     fprintf(stderr, "List events failed\n");
     return 1;
   }
 
   size_t num_events;
-  memcpy(&num_events, &resp_message[pos], sizeof(size_t));
-  pos += sizeof(size_t);
+  ssize_t bytes_read2 = read(resp_pipe, &num_events, sizeof(ssize_t));
 
   if (num_events == 0) {
     char buff[] = "No events\n";
@@ -340,7 +327,7 @@ int ems_list_events(int out_fd) {
   }
 
   unsigned int ids[num_events];
-  memcpy(&ids, &resp_message[pos], num_events);
+  ssize_t bytes_read3 = read(resp_pipe, ids, num_events*sizeof(unsigned int));
 
   for (size_t i = 0; i < num_events; i++) {
     char buff[] = "Event: ";
