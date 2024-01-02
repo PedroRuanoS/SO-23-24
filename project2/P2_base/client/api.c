@@ -229,7 +229,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   
   const char OP_CODE = '5';
 
-  if (write_str(req_pipe, OP_CODE) || write_int(req_pipe, session_id)) {
+  if (print_str(req_pipe, OP_CODE) || write_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
