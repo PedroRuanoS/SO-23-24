@@ -5,6 +5,9 @@
 #include <string.h>
 #include <unistd.h>
 
+#include <stdio.h> // REMOVER
+#include <fcntl.h>
+
 int parse_uint(int fd, unsigned int *value, char *next) {
   char buf[16];
 
@@ -78,42 +81,77 @@ int print_str(int fd, const char *str) {
   return 0;
 }
 
+int write_str(int fd, const char *str, size_t length) {
+  ssize_t written = write(fd, str, sizeof(char) * length);
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
+}
+
 int write_int(int fd, int value) {
-    ssize_t written = write(fd, &value, sizeof(int));
-    if (written == -1) {
-        return 1;
-    }
-    return 0;
-}
+  int out_fd = open("out.txt", O_WRONLY | O_CREAT | O_TRUNC, 0666);
+  if (out_fd == -1) {
+    fprintf(stderr, "Failed to open output file. Path: %s\n", "out.txt");
+    return 1;
+  }
+  write(out_fd, &value, sizeof(int));
+  
+  ssize_t written = write(fd, &value, sizeof(int));
 
-int write_sizet(int fd, size_t value) {
-    ssize_t written = write(fd, &value, sizeof(size_t));
-    if (written == -1) {
-        return 1;
-    }
-    return 0;
-}
+  printf("write_int: %zd\n", written);
 
-int write_uint_array(int fd, unsigned int *array, size_t length) {
-    ssize_t written = write(fd, array, sizeof(unsigned int) * length);
-    if (written == -1) {
-        return 1;
-    }
-    return 0;
-}
-
-int write_sizet_array(int fd, size_t *array, size_t length) {
-    ssize_t written = write(fd, array, sizeof(size_t) * length);
-    if (written == -1) {
-        return 1;
-    }
-    return 0;
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
 }
 
 int write_uint(int fd, unsigned int value) {
-    ssize_t written = write(fd, &value, sizeof(unsigned int));
-    if (written == -1) {
-        return 1;
-    }
-    return 0;
+  
+  
+  ssize_t written = write(fd, &value, sizeof(unsigned int));
+
+  printf("write_uint: %zd\n", written);
+
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
+}
+
+int write_sizet(int fd, size_t value) {
+  ssize_t written = write(fd, &value, sizeof(size_t));
+
+  printf("write_sizet: %zd\n", written);
+
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
+}
+
+int write_uint_array(int fd, unsigned int *array, size_t length) {
+
+
+
+  ssize_t written = write(fd, array, sizeof(unsigned int) * length);
+
+  printf("write_uint_array: %zd\n", written);
+
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
+}
+
+int write_sizet_array(int fd, size_t *array, size_t length) {
+  ssize_t written = write(fd, array, sizeof(size_t) * length);
+
+  printf("write_sizet_array: %zd\n", written);
+
+  if (written == -1) {
+    return 1;
+  }
+  return 0;
 }

@@ -13,6 +13,7 @@
 #include "common/io.h"
 #include "operations.h"
 #include "eventlist.h"
+#include "requests.h"
 
 typedef struct {
   int session_id;
@@ -79,6 +80,9 @@ int main(int argc, char* argv[]) {
     //ssize_t bytes_read = read(reg_server, buffer, 81);
     char op_code;
     ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
+
+    printf("Bytes_read: %zd op_code: %c\n", bytes_read, op_code);
+
     if (bytes_read == 0) { // diferente neste caso como mudar?
       fprintf(stderr, "register pipe closed\n");
       exit(EXIT_FAILURE);
@@ -97,9 +101,11 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
       }
 
-      char req_pipe_path[40];
-      char resp_pipe_path[40];
-      bytes_read = read(reg_server, req_pipe_path, 40*sizeof(char));
+      char req_path_buffer[40];
+      char resp_path_buffer[40];
+      bytes_read = read(reg_server, req_path_buffer, 40*sizeof(char));
+
+      printf("Request pipe path: %s, bytes_read: %zd\n", req_path_buffer, bytes_read);
 
       if (bytes_read == 0) {
         fprintf(stderr, "register pipe closed\n");
@@ -109,7 +115,9 @@ int main(int argc, char* argv[]) {
         return 1;
       }
 
-      bytes_read = read(reg_server, resp_pipe_path, 40*sizeof(char));
+      bytes_read = read(reg_server, resp_path_buffer, 40*sizeof(char));
+
+      printf("Responses pipe path: %s, bytes_read: %zd\n", resp_path_buffer, bytes_read);
 
       if (bytes_read == 0) {
         fprintf(stderr, "register pipe closed\n");
@@ -121,9 +129,17 @@ int main(int argc, char* argv[]) {
 
       // Open requests pipe for reading
       // This waits for the client to open it for writing
-      puts(req_pipe_path);
 
       printf("Server stuck opening request pipe\n");
+
+      size_t req_path_size = strlen(req_path_buffer) + strlen("../client/") + 1;
+      size_t resp_path_size = strlen(resp_path_buffer) + strlen("../client/") + 1;
+
+      char req_pipe_path[req_path_size];
+      char resp_pipe_path[resp_path_size];
+
+      snprintf(req_pipe_path, req_path_size, "../client/%s", req_path_buffer);
+      snprintf(resp_pipe_path, resp_path_size, "../client/%s", resp_path_buffer);
 
       new_client.req_pipe = open(req_pipe_path, O_RDONLY);
       if (new_client.req_pipe == -1) {
@@ -131,7 +147,7 @@ int main(int argc, char* argv[]) {
         exit(EXIT_FAILURE);
       }
 
-      printf("Server opened request pipe\n");
+      printf("Server opened request pipe, fd: %d\n", new_client.req_pipe);
 
       // Open responses pipe for writing
       // This waits for the client to open it for reading
@@ -150,8 +166,6 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    printf("Server bytes read: %zu\n", bytes_read);
-
     //TODO: Write new client to the producer-consumer buffer
   //}
   int quit = 0;
@@ -165,63 +179,26 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     } else {
-      int session_id;
+      int session_id = 0;
       unsigned int event_id;
       unsigned int *seats = NULL, *ids = NULL;
       size_t num_rows, num_cols, num_seats, num_events, num_rc[2];
-      size_t xys[MAX_RESERVATION_SIZE*2], xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-      int offset = 0, response = 0;
+      size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
+      int response = 0;
       switch (op_buffer) {
         case '1':
           //FIX ME: various clients
         case '2':
+          printf("Case 2: QUIT\n");
           //TODO: clear session_id
-          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
+          read_session_id(new_client.req_pipe, &session_id);
           quit = 1; 
           break;
 
         case '3':
-          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+          printf("Case 3: CREATE\n");
 
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, num_rc, sizeof(num_rc));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          num_rows = num_rc[0];
-          num_cols = num_rc[1];
+          read_create_request(new_client.req_pipe, &session_id, &event_id, &num_rows, &num_cols);
 
           if (write_int(new_client.resp_pipe, ems_create(event_id, num_rows, num_cols))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
@@ -230,50 +207,9 @@ int main(int argc, char* argv[]) {
           break;
 
         case '4':
-          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+          printf("Case 4: RESERVE\n");
 
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, &num_seats, sizeof(size_t));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, xys, sizeof(xys));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          for (int i = 0; i < num_seats; i++) {
-            xs[i] = xys[i];
-            ys[i] = xys[i + num_seats];
-          }
+          read_reserve_request(new_client.req_pipe, &session_id, &event_id, &num_seats, xs, ys);
 
           if (write_int(new_client.resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
@@ -282,25 +218,9 @@ int main(int argc, char* argv[]) {
           break;
 
         case '5':
-          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+          printf("Case 5: SHOW\n");
 
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
-
-          op_bytes_read = read(new_client.req_pipe, &event_id, sizeof(unsigned int));
-
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
+          read_show_request(new_client.req_pipe, &session_id, &event_id);
 
           response = ems_show(event_id, &num_rows, &num_cols, seats);
           
@@ -308,7 +228,7 @@ int main(int argc, char* argv[]) {
             if (write_int(new_client.resp_pipe, response)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
-            }       
+            }
           } else {
             num_rc[0] = num_rows;
             num_rc[1] = num_cols;
@@ -318,18 +238,13 @@ int main(int argc, char* argv[]) {
               return 1;
             }
           }
+          free(seats);
           break;
           
         case '6':
-          op_bytes_read = read(new_client.req_pipe, &session_id, sizeof(int));
+          printf("Case 6: LIST\n");
 
-          if (op_bytes_read == 0) {
-            fprintf(stderr, "requests pipe closed\n");
-            return 1;
-          } else if (op_bytes_read == -1) {
-            fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
-            return 1;
-          }
+          read_session_id(new_client.req_pipe, &session_id);
           
           response = ems_list_events(&num_events, ids);
 
@@ -343,8 +258,10 @@ int main(int argc, char* argv[]) {
                 || write_uint_array(new_client.resp_pipe, ids, num_events)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
               return 1;
-            } 
+            }
+
           }
+          free(ids);
           break;
       }
     }

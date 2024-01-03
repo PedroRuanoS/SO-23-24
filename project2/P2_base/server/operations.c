@@ -94,6 +94,11 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     free(event);
     return 1;
   }
+
+  printf("ems_create | num_rows: %zu num_cols: %zu\n", num_rows, num_cols);
+
+  
+
   event->data = calloc(num_rows * num_cols, sizeof(unsigned int));
 
   if (event->data == NULL) {

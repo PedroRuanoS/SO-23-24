@@ -42,7 +42,7 @@ Client dequeue(ClientQueue *queue) {
   
   if (queue->head != NULL) {
     QueueNode *temp = queue->head;
-    Client client = temp->client;
+    client = temp->client;
 
     queue->head = temp->next;
     if (queue->head == NULL) {

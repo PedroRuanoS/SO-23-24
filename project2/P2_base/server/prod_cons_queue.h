@@ -2,6 +2,7 @@
 #define PROD_CONS_QUEUE_H
 
 #include <stddef.h>
+#include <stdlib.h>
 #include <pthread.h>
 
 typedef struct {

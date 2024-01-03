@@ -22,6 +22,8 @@ int print_uint(int fd, unsigned int value);
 /// @return 0 if the string was written successfully, 1 otherwise.
 int print_str(int fd, const char *str);
 
+int write_str(int fd, const char *str, size_t length);
+
 int write_int(int fd, int value);
 
 int write_sizet(int fd, size_t value);
