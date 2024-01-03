@@ -71,7 +71,7 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   fill_str(resp_path, sizeof(resp_path), resp_pipe_path);
   
   // Send the register request to the server
-  if (print_str(reg_client, &OP_CODE) || write_str(reg_client, req_path, 40*sizeof(char)) || write_str(reg_client, resp_path, 40*sizeof(char))) {
+  if (write_str(reg_client, &OP_CODE, 1) || write_str(reg_client, req_path, 40*sizeof(char)) || write_str(reg_client, resp_path, 40*sizeof(char))) {
     fprintf(stderr, "Error writing to register pipe: %s\n", strerror(errno));
     return 1;
   } 
@@ -125,7 +125,7 @@ int ems_quit(void) {
   const char OP_CODE = '2';
 
   // Send a request to the server to end this session
-  if (print_str(req_pipe, &OP_CODE) || write_int(req_pipe, session_id)) {
+  if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -149,13 +149,8 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   // Send a create request to the server
 
   printf("ems_create | session_id: %d event_id: %u num_rows: %zu num_cols: %zu\n", session_id, event_id, num_rc[0], num_rc[1]);
-  if (write_str(req_pipe, &OP_CODE, 1)) {
-    fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
-    return 1;
-  }
-
-  if (write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
-      || write_sizet_array(req_pipe, num_rc, 2)) {
+  if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id) || 
+      write_uint(req_pipe, event_id) || write_sizet_array(req_pipe, num_rc, 2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
