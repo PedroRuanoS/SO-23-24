@@ -149,14 +149,12 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
   // Send a create request to the server
 
   printf("ems_create | session_id: %d event_id: %u num_rows: %zu num_cols: %zu\n", session_id, event_id, num_rc[0], num_rc[1]);
-  if (print_str(req_pipe, &OP_CODE)) {
+  if (write_str(req_pipe, &OP_CODE, 1)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
 
-  write(req_pipe, &session_id, sizeof(int));
-
-  if (/*write_int(req_pipe, session_id) || */write_uint(req_pipe, event_id)
+  if (write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
       || write_sizet_array(req_pipe, num_rc, 2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
@@ -208,7 +206,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   }
 
   // Send a reserve request to the server
-  if (print_str(req_pipe, &OP_CODE) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
+  if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)
       || write_sizet(req_pipe, num_seats) || write_sizet_array(req_pipe, xys, num_seats*2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
@@ -239,7 +237,7 @@ int ems_show(int out_fd, unsigned int event_id) {
   
   const char OP_CODE = '5';
 
-  if (print_str(req_pipe, &OP_CODE) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)) {
+  if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -282,8 +280,8 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  size_t seats[num_rows*num_cols];
-  bytes_read = read(resp_pipe, &seats, sizeof(size_t));
+  unsigned int seats[sizeof(unsigned int)*num_rows*num_cols];
+  bytes_read = read(resp_pipe, seats, sizeof(seats));
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
@@ -295,7 +293,9 @@ int ems_show(int out_fd, unsigned int event_id) {
   for (size_t i = 0; i < num_rows; i++) {
     for (size_t j = 0; j < num_cols; j++) {
       char buffer[16];
-      sprintf(buffer, "%zu", seats[i*num_cols + j]);
+      sprintf(buffer, "%u", seats[i*num_cols + j]);
+
+      printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
 
       if (print_str(out_fd, buffer)) {
         perror("Error writing to file descriptor");
@@ -327,7 +327,7 @@ int ems_list_events(int out_fd) {
   // snprintf(req_message, sizeof(req_message), "%c%d", OP_CODE, session_id);
 
   // Send a list request to the server
-  if (print_str(req_pipe, &OP_CODE) || write_int(req_pipe, session_id)) {
+  if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -368,8 +368,8 @@ int ems_list_events(int out_fd) {
     return 0;
   }
 
-  unsigned int ids[num_events];
-  bytes_read = read(resp_pipe, ids, num_events*sizeof(unsigned int));
+  unsigned int ids[sizeof(unsigned int)*num_events];
+  bytes_read = read(resp_pipe, ids, sizeof(ids));
 
   if (bytes_read == 0) {
     fprintf(stderr, "responses pipe closed\n");

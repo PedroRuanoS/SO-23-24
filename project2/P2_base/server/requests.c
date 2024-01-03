@@ -57,7 +57,7 @@ void read_create_request(int req_pipe, int *session_id, unsigned int *event_id, 
 }
 
 void read_reserve_request(int req_pipe, int *session_id, unsigned int *event_id, size_t *num_seats, size_t *xs, size_t *ys) {
-  size_t xys[MAX_RESERVATION_SIZE*2];
+  
 
   read_session_id(req_pipe, session_id);
   read_event_id(req_pipe, event_id);
@@ -71,6 +71,8 @@ void read_reserve_request(int req_pipe, int *session_id, unsigned int *event_id,
     fprintf(stderr, "Error reading from requests pipe: %s\n", strerror(errno));
     exit(EXIT_FAILURE); // alterar quando adicionarmos threads
   }
+
+  size_t xys[(*num_seats)*2];
 
   bytes_read = read(req_pipe, xys, sizeof(xys));
 

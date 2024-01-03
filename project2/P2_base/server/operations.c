@@ -179,7 +179,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned int *seats) {
+int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned int **seats) {
   if (event_list == NULL) { //pq é q não bloqueiam aqui??
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -207,7 +207,7 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
   (*num_rows) = event->rows;
   (*num_cols) = event->cols;
 
-  seats = (unsigned int*) malloc(sizeof(unsigned int) * (*num_rows) * (*num_cols) + 1);
+  *seats = (unsigned int*) malloc(sizeof(unsigned int) * (*num_rows) * (*num_cols));
   if (seats == NULL) {
     perror("Memory allocation failed");
     return 1;
@@ -215,7 +215,9 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
 
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
-      seats[i*(*num_cols) + j] = event->data[seat_index(event, i, j)];
+      unsigned int data = event->data[seat_index(event, i, j)];
+      printf("ems_show | event_data: %u seats pos: %zu\n", data, (i-1)*(*num_cols) + (j-1));
+      (*seats)[(i-1)*(*num_cols) + (j-1)] = data;//event->data[seat_index(event, i, j)];
     }
   }
 
@@ -223,7 +225,7 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
   return 0;
 }
 
-int ems_list_events(size_t *num_events, unsigned int *ids) {
+int ems_list_events(size_t *num_events, unsigned int **ids) {
   if (event_list == NULL) {
     fprintf(stderr, "EMS state must be initialized\n");
     return 1;
@@ -245,7 +247,7 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
 
   *num_events = 0;
   unsigned int ids_size = 256;
-  ids = (unsigned int*)malloc(ids_size*sizeof(unsigned int));
+  *ids = (unsigned int*)malloc(ids_size*sizeof(unsigned int));
 
   if (ids == NULL) {
     fprintf(stderr, "Memory allocation failed\n");
@@ -255,18 +257,18 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
   while (1) {
     if (*num_events > ids_size) {
       ids_size *= 2;
-      unsigned int *temp = (unsigned int*)realloc(ids, ids_size*sizeof(unsigned int));
+      unsigned int *temp = (unsigned int*)realloc(*ids, ids_size*sizeof(unsigned int));
 
       if (temp == NULL) {
         fprintf(stderr, "Memory reallocation failed\n");
-        free(ids);
+        free(*ids);
         return 1;
       }
 
-      ids = temp;
+      *ids = temp;
     }
 
-    ids[(*num_events)++] = (current->event)->id;
+    (*ids)[(*num_events)++] = (current->event)->id;
 
     if (current == to) {
       break;
@@ -275,15 +277,15 @@ int ems_list_events(size_t *num_events, unsigned int *ids) {
     current = current->next;
   }
   // readjust the size of the array
-  unsigned int *temp = (unsigned int*)realloc(ids, (*num_events)*sizeof(unsigned int));
+  unsigned int *temp = (unsigned int*)realloc(*ids, (*num_events)*sizeof(unsigned int));
 
   if (temp == NULL) {
     fprintf(stderr, "Memory reallocation failed\n");
-    free(ids);
+    free(*ids);
     return 1;
   }
   
-  ids = temp;
+  *ids = temp;
 
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;

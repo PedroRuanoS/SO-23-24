@@ -32,12 +32,12 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t *xs, size_t *ys)
 /// @param num_rows Pointer to the number of columns of the event.
 /// @param seats Array of seats.
 /// @return 0 if the event was printed successfully, 1 otherwise.
-int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned int *seats);
+int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned int **seats);
 
 /// Prints all the events.
 /// @param num_events Pointer to the number of events.
 /// @param ids Array of event ids.
 /// @return 0 if the events were printed successfully, 1 otherwise.
-int ems_list_events(size_t *num_events, unsigned int *ids);
+int ems_list_events(size_t *num_events, unsigned int **ids);
 
 #endif  // SERVER_OPERATIONS_H

@@ -222,7 +222,9 @@ int main(int argc, char* argv[]) {
 
           read_show_request(new_client.req_pipe, &session_id, &event_id);
 
-          response = ems_show(event_id, &num_rows, &num_cols, seats);
+          printf("show | seats address: %p\n", seats);
+
+          response = ems_show(event_id, &num_rows, &num_cols, &seats);
           
           if (response) {
             if (write_int(new_client.resp_pipe, response)) {
@@ -232,6 +234,11 @@ int main(int argc, char* argv[]) {
           } else {
             num_rc[0] = num_rows;
             num_rc[1] = num_cols;
+            printf("show | num_rows: %zu num_cols: %zu seats address: %p\n", num_rc[0], num_rc[1], seats);
+            for (size_t i = 0; i < num_rows*num_cols; i++) {
+              printf("seats[%zu] = %u\n", i, seats[i]);
+            }
+
             if (write_int(new_client.resp_pipe, response) || write_sizet_array(new_client.resp_pipe, num_rc, 2)
                 || write_uint_array(new_client.resp_pipe, seats, num_rows*num_cols)) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
@@ -246,7 +253,7 @@ int main(int argc, char* argv[]) {
 
           read_session_id(new_client.req_pipe, &session_id);
           
-          response = ems_list_events(&num_events, ids);
+          response = ems_list_events(&num_events, &ids);
 
           if (response) {
             if (write_int(new_client.resp_pipe, response)) {
