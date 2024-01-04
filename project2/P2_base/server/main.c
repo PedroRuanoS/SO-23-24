@@ -298,11 +298,12 @@ int main(int argc, char* argv[]) {
     char op_code;
     ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
 
-    printf("Bytes_read: %zd op_code: %c\n", bytes_read, op_code);
+    //printf("Bytes_read: %zd op_code: %c\n", bytes_read, op_code);
 
     if (bytes_read == 0) { // diferente neste caso como mudar?
-      fprintf(stderr, "register pipe closed\n");
-      exit(EXIT_FAILURE);
+      continue;
+      // fprintf(stderr, "register pipe closed\n");
+      // exit(EXIT_FAILURE);
     } else if (bytes_read == -1) {
       fprintf(stderr, "read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
