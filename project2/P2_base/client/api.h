@@ -40,4 +40,6 @@ int ems_show(int out_fd, unsigned int event_id);
 /// @return 0 if the events were printed successfully, 1 otherwise.
 int ems_list_events(int out_fd);
 
+void fill_str(char result_array[], size_t size, const char *str);
+
 #endif  // CLIENT_API_H

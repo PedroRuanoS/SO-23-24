@@ -6,9 +6,9 @@
 #include <pthread.h>
 
 typedef struct {
-  int session_id;
-  int req_pipe;
-  int resp_pipe;
+  //int session_id;
+  char *req_pipe_path;
+  char *resp_pipe_path;
 } Client;
 
 typedef struct queueNode {
