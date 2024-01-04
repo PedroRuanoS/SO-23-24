@@ -12,25 +12,18 @@
 #include <pthread.h>
 #include <semaphore.h>
 
-#include "../common/constants.h"
-#include "../common/io.h"
+#include "common/constants.h"
+#include "common/io.h"
 #include "operations.h"
-#include "eventlist.h"
 #include "requests.h"
 #include "prod_cons_queue.h"
-
-typedef struct {
-  //int session_id;
-  char *req_pipe_path;
-  char *resp_pipe_path;
-} Client;
 
 pthread_mutex_t sessions_mutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t semSessions;
 int sessions[MAX_SESSION_COUNT] = {0}; // apagar da main
 
-void *consumer_thread_fn(void* queue) {
-  ClientQueue *queue = (ClientQueue*) queue;
+void *consumer_thread_fn(void* arg) {
+  ClientQueue *queue = (ClientQueue*) arg;
 
   while (1) {
     Client new_client = dequeue(queue);
@@ -46,7 +39,7 @@ void *consumer_thread_fn(void* queue) {
       
       if (pthread_mutex_lock(&sessions_mutex) != 0) {
         fprintf(stderr, "Error locking sessions mutex\n");
-        return 1;
+        //return 1;
       }
 
       if (sessions[i] == 0) {
@@ -55,13 +48,13 @@ void *consumer_thread_fn(void* queue) {
 
         if (pthread_mutex_unlock(&sessions_mutex) != 0) {
           fprintf(stderr, "Error unlocking sessions mutex\n");
-          return 1;
+          //return 1;
         }
         break;
       }
       if (pthread_mutex_unlock(&sessions_mutex) != 0) {
         fprintf(stderr, "Error unlocking sessions mutex\n");
-        return 1;
+        //return 1;
       }
     }
 
@@ -108,21 +101,21 @@ void *consumer_thread_fn(void* queue) {
         //TODO: clear session_id
         if (pthread_mutex_lock(&sessions_mutex) != 0) {
           fprintf(stderr, "Error locking sessions mutex\n");
-          return 1;
+          //return 1;
         }
 
         sessions[session_id] = 0;
         sem_post(&semSessions);
         if (pthread_mutex_unlock(&sessions_mutex) != 0) {
           fprintf(stderr, "Error unlocking sessions mutex\n");
-          return 1;
+          //return 1;
         }
         quit = 1;        
       } else if (op_bytes_read == -1) {
         fprintf(stderr, "Read failed: %s\n", strerror(errno));
         exit(EXIT_FAILURE);
       } else {
-        int session_id = 0;
+        int resp_session_id = 0;
         unsigned int event_id;
         unsigned int *seats = NULL, *ids = NULL;
         size_t num_rows, num_cols, num_seats, num_events, num_rc[2];
@@ -134,18 +127,18 @@ void *consumer_thread_fn(void* queue) {
           case '2':
             printf("Case 2: QUIT\n");
             //TODO: clear session_id
-            read_session_id(req_pipe, &session_id);
+            read_session_id(req_pipe, &resp_session_id);
             
             if (pthread_mutex_lock(&sessions_mutex) != 0) {
               fprintf(stderr, "Error locking sessions mutex\n");
-              return 1;
+              //return 1;
             }
 
             sessions[session_id] = 0;
             sem_post(&semSessions);
             if (pthread_mutex_unlock(&sessions_mutex) != 0) {
               fprintf(stderr, "Error unlocking sessions mutex\n");
-              return 1;
+              //return 1;
             }
             //pthread_cond_signal(&cond);
             quit = 1;
@@ -153,29 +146,29 @@ void *consumer_thread_fn(void* queue) {
           case '3':
             printf("Case 3: CREATE\n");
 
-            read_create_request(req_pipe, &session_id, &event_id, &num_rows, &num_cols);
+            read_create_request(req_pipe, &resp_session_id, &event_id, &num_rows, &num_cols);
 
             if (write_int(resp_pipe, ems_create(event_id, num_rows, num_cols))) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-              return 1;
+              //return 1;
             }  
             break;
 
           case '4':
             printf("Case 4: RESERVE\n");
 
-            read_reserve_request(req_pipe, &session_id, &event_id, &num_seats, xs, ys);
+            read_reserve_request(req_pipe, &resp_session_id, &event_id, &num_seats, xs, ys);
 
             if (write_int(resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-              return 1;
+              //return 1;
             }       
             break;
 
           case '5':
             printf("Case 5: SHOW\n");
 
-            read_show_request(req_pipe, &session_id, &event_id);
+            read_show_request(req_pipe, &resp_session_id, &event_id);
 
             printf("show | seats address: %p\n", seats);
 
@@ -184,7 +177,7 @@ void *consumer_thread_fn(void* queue) {
             if (response) {
               if (write_int(resp_pipe, response)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return 1;
+                //return 1;
               }
             } else {
               num_rc[0] = num_rows;
@@ -197,7 +190,7 @@ void *consumer_thread_fn(void* queue) {
               if (write_int(resp_pipe, response) || write_sizet_array(resp_pipe, num_rc, 2)
                   || write_uint_array(resp_pipe, seats, num_rows*num_cols)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return 1;
+                //return 1;
               }
             }
             free(seats);
@@ -206,20 +199,20 @@ void *consumer_thread_fn(void* queue) {
           case '6':
             printf("Case 6: LIST\n");
 
-            read_session_id(req_pipe, &session_id);
+            read_session_id(req_pipe, &resp_session_id);
             
             response = ems_list_events(&num_events, &ids);
 
             if (response) {
               if (write_int(resp_pipe, response)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return 1;
+                //return 1;
               } 
             } else {
               if (write_int(resp_pipe, response) || write_sizet(resp_pipe, num_events) 
                   || write_uint_array(resp_pipe, ids, num_events)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return 1;
+                //return 1;
               }
 
             }
