@@ -9,7 +9,10 @@ void init_queue(ClientQueue *queue) {
 }
 
 void enqueue(ClientQueue *queue, Client *client) {  
-  pthread_mutex_lock(&queue->mutex);
+  if (pthread_mutex_lock(&queue->mutex) != 0) {
+    fprintf(stderr, "Error locking queue mutex\n");
+    exit(EXIT_FAILURE);
+  }
 
   QueueNode *newNode = (QueueNode*)malloc(sizeof(QueueNode));
   if (newNode == NULL) {
@@ -28,11 +31,17 @@ void enqueue(ClientQueue *queue, Client *client) {
   }
 
   pthread_cond_signal(&queue->cond);
-  pthread_mutex_unlock(&queue->mutex);
+  if (pthread_mutex_unlock(&queue->mutex) != 0) {
+    fprintf(stderr, "Error unlocking queue mutex\n");
+    exit(EXIT_FAILURE);
+  }
 }
 
 Client dequeue(ClientQueue *queue) {
-  pthread_mutex_lock(&queue->mutex);
+  if (pthread_mutex_lock(&queue->mutex) != 0) {
+    fprintf(stderr, "Error locking queue mutex\n");
+    exit(EXIT_FAILURE);
+  }
 
   while (queue->head == NULL) {
     // Wait for a command to be enqueued
@@ -52,7 +61,10 @@ Client dequeue(ClientQueue *queue) {
     free(temp);
   }
 
-  pthread_mutex_unlock(&queue->mutex);
+  if (pthread_mutex_unlock(&queue->mutex) != 0) {
+    fprintf(stderr, "Error unlocking queue mutex\n");
+    exit(EXIT_FAILURE);
+  }
   return client;
 }
 
