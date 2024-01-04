@@ -1,4 +1,5 @@
 #include <limits.h>
+#include <pthread.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,8 +10,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-#include "common/constants.h"
-#include "common/io.h"
+#include "../common/constants.h"
+#include "../common/io.h"
 #include "operations.h"
 #include "eventlist.h"
 #include "requests.h"
@@ -166,9 +167,20 @@ int main(int argc, char* argv[]) {
   }
 
   //TODO: Initialize server, create worker threads
+  ClientQueue client_queue;
+  init_queue(&client_queue);
+  pthread_t tid[MAX_SESSION_COUNT];
+  
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    if (pthread_create(&tid[i], NULL, consumer_thread_fn, &client_queue) != 0) {
+      fprintf(stderr, "Failed to create client thread: %s\n", strerror(errno));
+      exit(1);
+    }
+  }
+  
   char pipe_path[MAX_JOB_FILE_NAME_SIZE]; // alterar constante max job?
   strcpy(pipe_path, argv[1]);
-
+  
   if (unlink(pipe_path) != 0 && errno != ENOENT) {
     fprintf(stderr, "unlink(%s) failed: %s\n", pipe_path,
             strerror(errno));
@@ -192,7 +204,7 @@ int main(int argc, char* argv[]) {
   printf("Server opened register pipe\n");
   
   // por esta linha dentro do while quando tivermos multiplas sessoes
-  Client new_client = {.session_id = 0}; // alterar lógica de criação do session id
+  Client new_client; // alterar lógica de criação do session id
 
   int sessions[MAX_SESSION_COUNT] = {0};
   
@@ -263,6 +275,8 @@ int main(int argc, char* argv[]) {
       snprintf(req_pipe_path, req_path_size, "../client/%s", req_path_buffer);
       snprintf(resp_pipe_path, resp_path_size, "../client/%s", resp_path_buffer);
 
+      enqueue(&client_queue, &new_client);
+      
       new_client.req_pipe = open(req_pipe_path, O_RDONLY);
       if (new_client.req_pipe == -1) {
         fprintf(stderr, "open failed: %s\n", strerror(errno));
@@ -412,6 +426,10 @@ int main(int argc, char* argv[]) {
   close(new_client.resp_pipe);
 
 
+  for (int i = 0; i < MAX_SESSION_COUNT; i++) {
+    pthread_join(tid[i], NULL)
+  }
+  free_queue(&commandQueue);
   //TODO: Close Server
   close(reg_server);
 
