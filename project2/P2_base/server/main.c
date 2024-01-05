@@ -155,19 +155,22 @@ void *consumer_thread_fn(void* arg) {
           case '2':
             printf("Case 2: QUIT\n");
             if (read_session_id(req_pipe, &resp_session_id)) {
+              quit = 1;
               break;
             }
             
             if (pthread_mutex_lock(&sessions_mutex) != 0) {
               fprintf(stderr, "Error locking sessions mutex\n");
-              return NULL;
+              quit = 1;
+              break;
             }
 
             sessions[session_id] = 0;
             sem_post(&semSessions);
             if (pthread_mutex_unlock(&sessions_mutex) != 0) {
               fprintf(stderr, "Error unlocking sessions mutex\n");
-              return NULL;
+              quit = 1;
+              break;
             }
             quit = 1;
             break;
@@ -177,12 +180,14 @@ void *consumer_thread_fn(void* arg) {
 
             if (read_create_request(req_pipe, &resp_session_id, &event_id, 
                 &num_rows, &num_cols)) {
+              quit = 1;
               break;
             }
 
             if (write_int(resp_pipe, ems_create(event_id, num_rows, num_cols))) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-              return NULL;
+              quit = 1;
+              break;
             }  
             break;
 
@@ -191,12 +196,14 @@ void *consumer_thread_fn(void* arg) {
 
             if (read_reserve_request(req_pipe, &resp_session_id, &event_id, 
                 &num_seats, xs, ys)) {
+              quit = 1;
               break;
             }
 
             if (write_int(resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
               fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-              return NULL;
+              quit = 1;
+              break;
             }       
             break;
 
@@ -204,6 +211,7 @@ void *consumer_thread_fn(void* arg) {
             printf("Case 5: SHOW\n");
 
             if (read_show_request(req_pipe, &resp_session_id, &event_id)) {
+              quit = 1;
               break;
             }
 
@@ -214,7 +222,8 @@ void *consumer_thread_fn(void* arg) {
             if (response) {
               if (write_int(resp_pipe, response)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return NULL;
+                quit = 1;
+                break;
               }
             } else {
               num_rc[0] = num_rows;
@@ -227,7 +236,8 @@ void *consumer_thread_fn(void* arg) {
               if (write_int(resp_pipe, response) || write_sizet_array(resp_pipe, num_rc, 2)
                   || write_uint_array(resp_pipe, seats, num_rows*num_cols)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return NULL;
+                quit = 1;
+                break;
               }
             }
             free(seats);
@@ -237,6 +247,7 @@ void *consumer_thread_fn(void* arg) {
             printf("Case 6: LIST\n");
 
             if (read_session_id(req_pipe, &resp_session_id)) {
+              quit = 1;
               break;
             }
             
@@ -245,13 +256,15 @@ void *consumer_thread_fn(void* arg) {
             if (response) {
               if (write_int(resp_pipe, response)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return NULL;
+                quit = 1;
+                break;
               } 
             } else {
               if (write_int(resp_pipe, response) || write_sizet(resp_pipe, num_events) 
                   || write_uint_array(resp_pipe, ids, num_events)) {
                 fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-                return NULL;
+                quit = 1;
+                break;
               }
 
             }
