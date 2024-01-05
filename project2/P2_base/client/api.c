@@ -28,7 +28,6 @@ void fill_str(char result_array[], size_t size, const char *str) {
 }
 
 int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const* server_pipe_path) {
-  //TODO: create pipes and connect to the server
   if (unlink(req_pipe_path) != 0 && errno != ENOENT) {
     fprintf(stderr, "unlink(%s) failed: %s\n", req_pipe_path,
             strerror(errno));
@@ -61,9 +60,7 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
-  printf("Client opened register pipe\n");
-
-  const char OP_CODE = '1'; // letra maiuscula?
+  const char OP_CODE = '1';
   char req_path[40];
   char resp_path[40];
 
@@ -75,8 +72,6 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     fprintf(stderr, "Error writing to register pipe: %s\n", strerror(errno));
     return 1;
   } 
-
-  printf("Client stuck opening request pipe\n");
   
   // Open requests pipe for writing
   // This waits for the server to open it for reading
@@ -87,8 +82,6 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
-  printf("Client opened request pipe\n");
-
   // Open responses pipe for reading
   // This waits for the server to open it for writing
   resp_pipe = open(resp_pipe_path, O_RDONLY);
@@ -97,31 +90,24 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     return 1;
   }
 
-  printf("Client opened responses pipe\n");
-
   // Obtain the response from the server with the session id
-  char buffer[sizeof(int) + 1]; // é preciso o +1 neste caso?
+  char buffer[sizeof(int) + 1];
   ssize_t ret = read(resp_pipe, buffer, sizeof(int));
 
-  // sizeof(int) ou sizeof(buffer)?
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (ret == -1) { // ou while até receber o inteiro?
+  } else if (ret == -1) {
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
 
   memcpy(&session_id, &buffer[0], sizeof(int)); // store the session id
 
-  printf("Session_id stored: %d\n", session_id);
-
   return 0;
 }
 
 int ems_quit(void) {
-  //TODO: close pipes
-
   const char OP_CODE = '2';
 
   // Send a request to the server to end this session
@@ -137,18 +123,12 @@ int ems_quit(void) {
 }
 
 int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
-  //TODO: send create request to the server (through the request pipe) and wait for the response (through the response pipe)
-
   const char OP_CODE = '3';
   size_t num_rc[2];
   num_rc[0] = num_rows;
   num_rc[1] = num_cols;
-  //char req_message[sizeof(int) + sizeof(unsigned int) + sizeof(size_t)*2 + 2];
-  //snprintf(req_message, sizeof(req_message), "%c%d%u%zu%zu", OP_CODE, session_id, event_id, num_rows, num_cols);
-
+  
   // Send a create request to the server
-
-  printf("ems_create | session_id: %d event_id: %u num_rows: %zu num_cols: %zu\n", session_id, event_id, num_rc[0], num_rc[1]);
   if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id) || 
       write_uint(req_pipe, event_id) || write_sizet_array(req_pipe, num_rc, 2)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));
@@ -157,14 +137,12 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 
   // Obtain the response from the server
   int response;
-  // char resp_message[sizeof(int) + 1];
   ssize_t ret = read(resp_pipe, &response, sizeof(int));
 
-  // sizeof(int) ou sizeof(buffer)?
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
     return 1;
-  } else if (ret == -1) { // ou while até receber o inteiro?
+  } else if (ret == -1) { 
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
@@ -178,22 +156,8 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
 }
 
 int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys) {
-  //TODO: send reserve request to the server (through the request pipe) and wait for the response (through the response pipe)
-
   const char OP_CODE = '4';
-  /*
-  char req_message[sizeof(int) + sizeof(unsigned int) + sizeof(size_t) + sizeof(xs) + sizeof(ys) + 2];
-  int bytes_written = snprintf(req_message, sizeof(req_message), "%c%d%u%zu", OP_CODE, session_id, event_id, num_seats);
-
-  for (size_t i = 0; i < num_seats; i++) {
-    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - (size_t)bytes_written, "%zu", xs[i]);
-  }
-
-  for (size_t i = 0; i < num_seats; i++) {
-    bytes_written += snprintf(req_message + bytes_written, sizeof(req_message) - (size_t)bytes_written, "%zu", ys[i]);
-  }
-  */
-
+  
   size_t xys[num_seats*2];
   for (size_t i = 0; i < num_seats; i++) {
     xys[i] = xs[i];
@@ -227,9 +191,7 @@ int ems_reserve(unsigned int event_id, size_t num_seats, size_t* xs, size_t* ys)
   return 0;
 }
 
-int ems_show(int out_fd, unsigned int event_id) {
-  //TODO: send show request to the server (through the request pipe) and wait for the response (through the response pipe)
-  
+int ems_show(int out_fd, unsigned int event_id) {  
   const char OP_CODE = '5';
 
   if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id) || write_uint(req_pipe, event_id)) {
@@ -287,42 +249,12 @@ int ems_show(int out_fd, unsigned int event_id) {
 
   print_event_info(out_fd, num_rows, num_cols, seats);
 
-  // for (size_t i = 0; i < num_rows; i++) {
-  //   for (size_t j = 0; j < num_cols; j++) {
-  //     char buffer[16];
-  //     sprintf(buffer, "%u", seats[i*num_cols + j]);
-
-  //     printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
-
-  //     if (print_str(out_fd, buffer)) {
-  //       perror("Error writing to file descriptor");
-  //       return 1;
-  //     }
-
-  //     if (j < num_cols - 1) {
-  //       if (print_str(out_fd, " ")) {
-  //       perror("Error writing to file descriptor");
-  //       return 1;
-  //       }
-  //     }
-  //   }
-
-  //   if (print_str(out_fd, "\n")) {
-  //     perror("Error writing to file descriptor");
-  //     return 1;
-  //   }
-  // }
-
   return 0;
 }
 
 int ems_list_events(int out_fd) {
-  //TODO: send list request to the server (through the request pipe) and wait for the response (through the response pipe)
-  
   const char OP_CODE = '6';
-  // char req_message[sizeof(int) + 2];
-  // snprintf(req_message, sizeof(req_message), "%c%d", OP_CODE, session_id);
-
+  
   // Send a list request to the server
   if (write_str(req_pipe, &OP_CODE, 1) || write_int(req_pipe, session_id)) {
     fprintf(stderr, "Error writing to requests pipe: %s\n", strerror(errno));

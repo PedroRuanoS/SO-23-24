@@ -93,11 +93,7 @@ int ems_create(unsigned int event_id, size_t num_rows, size_t num_cols) {
     pthread_rwlock_unlock(&event_list->rwl);
     free(event);
     return 1;
-  }
-
-  printf("ems_create | num_rows: %zu num_cols: %zu\n", num_rows, num_cols);
-
-  
+  }  
 
   event->data = calloc(num_rows * num_cols, sizeof(unsigned int));
 
@@ -216,8 +212,7 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
   for (size_t i = 1; i <= event->rows; i++) {
     for (size_t j = 1; j <= event->cols; j++) {
       unsigned int data = event->data[seat_index(event, i, j)];
-      printf("ems_show | event_data: %u seats pos: %zu\n", data, (i-1)*(*num_cols) + (j-1));
-      (*seats)[(i-1)*(*num_cols) + (j-1)] = data;//event->data[seat_index(event, i, j)];
+      (*seats)[(i-1)*(*num_cols) + (j-1)] = event->data[seat_index(event, i, j)];
     }
   }
 

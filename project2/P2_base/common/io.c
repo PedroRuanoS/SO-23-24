@@ -92,8 +92,6 @@ int write_str(int fd, const char *str, size_t length) {
 int write_int(int fd, int value) {  
   ssize_t written = write(fd, &value, sizeof(int));
 
-  printf("write_int: %zd\n", written);
-
   if (written == -1) {
     return 1;
   }
@@ -102,8 +100,6 @@ int write_int(int fd, int value) {
 
 int write_uint(int fd, unsigned int value) { 
   ssize_t written = write(fd, &value, sizeof(unsigned int));
-
-  printf("write_uint: %zd\n", written);
 
   if (written == -1) {
     return 1;
@@ -114,8 +110,6 @@ int write_uint(int fd, unsigned int value) {
 int write_sizet(int fd, size_t value) {
   ssize_t written = write(fd, &value, sizeof(size_t));
 
-  printf("write_sizet: %zd\n", written);
-
   if (written == -1) {
     return 1;
   }
@@ -125,8 +119,6 @@ int write_sizet(int fd, size_t value) {
 int write_uint_array(int fd, unsigned int *array, size_t length) {
   ssize_t written = write(fd, array, sizeof(unsigned int) * length);
 
-  printf("write_uint_array: %zd\n", written);
-
   if (written == -1) {
     return 1;
   }
@@ -135,8 +127,6 @@ int write_uint_array(int fd, unsigned int *array, size_t length) {
 
 int write_sizet_array(int fd, size_t *array, size_t length) {
   ssize_t written = write(fd, array, sizeof(size_t) * length);
-
-  printf("write_sizet_array: %zd\n", written);
 
   if (written == -1) {
     return 1;
@@ -149,8 +139,6 @@ int print_event_info(int fd, size_t num_rows, size_t num_cols, unsigned int *sea
     for (size_t j = 0; j < num_cols; j++) {
       char buffer[16];
       sprintf(buffer, "%u", seats[i*num_cols + j]);
-
-      printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
 
       if (print_str(fd, buffer)) {
         perror("Error writing to file descriptor");

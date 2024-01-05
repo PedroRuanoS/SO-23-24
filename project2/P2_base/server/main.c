@@ -96,8 +96,6 @@ void *consumer_thread_fn(void* arg) {
       return NULL;
     }
 
-    printf("Server opened request pipe, fd: %d\n", req_pipe);
-
     // Open responses pipe for writing
     // This waits for the client to open it for reading
     resp_pipe = open(new_client.resp_pipe_path, O_WRONLY);
@@ -105,8 +103,6 @@ void *consumer_thread_fn(void* arg) {
       fprintf(stderr, "Open failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     }
-
-    printf("Server opened responses pipe\n");
 
     for (int i = 0; i < MAX_SESSION_COUNT; i++) {
       pthread_mutex_lock(&sessions_mutex);
@@ -153,7 +149,6 @@ void *consumer_thread_fn(void* arg) {
         int response = 0;
         switch (op_buffer) {
           case '2':
-            printf("Case 2: QUIT\n");
             if (read_session_id(req_pipe, &resp_session_id)) {
               quit = 1;
               break;
@@ -176,8 +171,6 @@ void *consumer_thread_fn(void* arg) {
             break;
 
           case '3':
-            printf("Case 3: CREATE\n");
-
             if (read_create_request(req_pipe, &resp_session_id, &event_id, 
                 &num_rows, &num_cols)) {
               quit = 1;
@@ -192,8 +185,6 @@ void *consumer_thread_fn(void* arg) {
             break;
 
           case '4':
-            printf("Case 4: RESERVE\n");
-
             if (read_reserve_request(req_pipe, &resp_session_id, &event_id, 
                 &num_seats, xs, ys)) {
               quit = 1;
@@ -208,14 +199,10 @@ void *consumer_thread_fn(void* arg) {
             break;
 
           case '5':
-            printf("Case 5: SHOW\n");
-
             if (read_show_request(req_pipe, &resp_session_id, &event_id)) {
               quit = 1;
               break;
             }
-
-            printf("show | seats address: %p\n", seats);
 
             response = ems_show(event_id, &num_rows, &num_cols, &seats);
             
@@ -228,10 +215,6 @@ void *consumer_thread_fn(void* arg) {
             } else {
               num_rc[0] = num_rows;
               num_rc[1] = num_cols;
-              printf("show | num_rows: %zu num_cols: %zu seats address: %p\n", num_rc[0], num_rc[1], seats);
-              for (size_t i = 0; i < num_rows*num_cols; i++) {
-                printf("seats[%zu] = %u\n", i, seats[i]);
-              }
 
               if (write_int(resp_pipe, response) || write_sizet_array(resp_pipe, num_rc, 2)
                   || write_uint_array(resp_pipe, seats, num_rows*num_cols)) {
@@ -244,8 +227,6 @@ void *consumer_thread_fn(void* arg) {
             break;
             
           case '6':
-            printf("Case 6: LIST\n");
-
             if (read_session_id(req_pipe, &resp_session_id)) {
               quit = 1;
               break;
@@ -344,8 +325,6 @@ int main(int argc, char* argv[]) {
     exit(EXIT_FAILURE);
   }
 
-  printf("Server opened register pipe\n");
-
   sem_init(&semSessions, 0, MAX_SESSION_COUNT);
   
   while (1) {
@@ -366,8 +345,6 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Read failed: %s\n", strerror(errno));
       continue;
     } else {
-      printf("OP_CODE: %c\n", op_code);
-
       if (op_code != '1') {
         fprintf(stderr, "Operation code must be 1 for setup\n");
         continue;
@@ -376,8 +353,6 @@ int main(int argc, char* argv[]) {
       char req_path_buffer[PATH_SIZE];
       char resp_path_buffer[PATH_SIZE];
       bytes_read = read(reg_server, req_path_buffer, PATH_SIZE*sizeof(char));
-
-      printf("Request pipe path: %s, bytes_read: %zd\n", req_path_buffer, bytes_read);
 
       if (bytes_read == 0) {
         fprintf(stderr, "Register pipe closed\n");
@@ -389,8 +364,6 @@ int main(int argc, char* argv[]) {
 
       bytes_read = read(reg_server, resp_path_buffer, PATH_SIZE*sizeof(char));
 
-      printf("Responses pipe path: %s, bytes_read: %zd\n", resp_path_buffer, bytes_read);
-
       if (bytes_read == 0) {
         fprintf(stderr, "Register pipe closed\n");
         continue;
@@ -401,9 +374,6 @@ int main(int argc, char* argv[]) {
 
       // Open requests pipe for reading
       // This waits for the client to open it for writing
-
-      printf("Server stuck opening request pipe\n");
-
       size_t req_path_size = strlen(req_path_buffer) + strlen("../client/") + 1;
       size_t resp_path_size = strlen(resp_path_buffer) + strlen("../client/") + 1;
 
