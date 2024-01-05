@@ -38,16 +38,17 @@ void enqueue(ClientQueue *queue, Client *client) {
 }
 
 Client dequeue(ClientQueue *queue) {
+  Client client = {.req_pipe_path = ""};
+
   if (pthread_mutex_lock(&queue->mutex) != 0) {
     fprintf(stderr, "Error locking queue mutex\n");
-    return; // PERGUNTAR
+    return client;
   }
 
   while (queue->head == NULL) {
     // Wait for a command to be enqueued
     pthread_cond_wait(&queue->cond, &queue->mutex);
   }
-  Client client;
   
   if (queue->head != NULL) {
     QueueNode *temp = queue->head;
@@ -63,7 +64,7 @@ Client dequeue(ClientQueue *queue) {
 
   if (pthread_mutex_unlock(&queue->mutex) != 0) {
     fprintf(stderr, "Error unlocking queue mutex\n");
-    return;
+    return client;
   }
   return client;
 }

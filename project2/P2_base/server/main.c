@@ -4,7 +4,6 @@
  * Alunos: Pedro Silveira (106642), Raquel Rodrigues (106322)
  */
 
-#include <bits/pthreadtypes.h>
 #include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -31,6 +30,8 @@ pthread_mutex_t sessions_mutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t semSessions;
 int sessions[MAX_SESSION_COUNT] = {0};
 
+/// Handles a SIGUSR1 signal.
+/// @param sig Signal received.
 void sig_handler(int sig) {
   if (sig == SIGUSR1) {
     if (signal(SIGUSR1, sig_handler) == SIG_ERR) {
@@ -43,6 +44,8 @@ void sig_handler(int sig) {
   }
 }
 
+/// Consumer thread function.
+/// @param arg Pointer to the client queue to consume from.
 void *consumer_thread_fn(void* arg) {
   sigset_t set;
   sigemptyset(&set);
@@ -57,6 +60,8 @@ void *consumer_thread_fn(void* arg) {
 
   while (1) {
     Client new_client = dequeue(queue);
+    if (strlen(new_client.req_pipe_path) == 0) { continue; }
+
     int quit = 0;
     int session_id;
     int req_pipe;
@@ -262,6 +267,7 @@ void *consumer_thread_fn(void* arg) {
   }
 }
 
+// Event Management System using a producer consumer queue and named pipes.
 int main(int argc, char* argv[]) {
   if (argc < 2 || argc > 3) {
     fprintf(stderr, "Usage: %s\n <pipe_path> [delay]\n", argv[0]);

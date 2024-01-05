@@ -6,7 +6,6 @@
 #include <pthread.h>
 
 typedef struct {
-  //int session_id;
   char *req_pipe_path;
   char *resp_pipe_path;
 } Client;
