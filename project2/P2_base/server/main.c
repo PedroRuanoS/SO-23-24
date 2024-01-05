@@ -90,7 +90,7 @@ void *consumer_thread_fn(void* arg) {
       }
     }
 
-    req_pipe = open(new_client.req_pipe_path, O_RDONLY);
+    req_pipe = open(new_client.req_pipe_path, O_RDWR);
     if (req_pipe == -1) {
       fprintf(stderr, "Open failed: %s\n", strerror(errno));
       return NULL;
@@ -351,7 +351,7 @@ int main(int argc, char* argv[]) {
   while (1) {
     sem_wait(&semSessions);
     //TODO: Read from pipe
-    char op_code;
+    char op_code = 0;
     ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
 
     // SIGUSR1 signal was sent
@@ -366,6 +366,7 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "Read failed: %s\n", strerror(errno));
       continue;
     } else {
+      printf("OP_CODE: %c\n", op_code);
 
       if (op_code != '1') {
         fprintf(stderr, "Operation code must be 1 for setup\n");
