@@ -143,3 +143,32 @@ int write_sizet_array(int fd, size_t *array, size_t length) {
   }
   return 0;
 }
+
+int print_event_info(int fd, size_t num_rows, size_t num_cols, unsigned int *seats) {
+  for (size_t i = 0; i < num_rows; i++) {
+    for (size_t j = 0; j < num_cols; j++) {
+      char buffer[16];
+      sprintf(buffer, "%u", seats[i*num_cols + j]);
+
+      printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
+
+      if (print_str(fd, buffer)) {
+        perror("Error writing to file descriptor");
+        return 1;
+      }
+
+      if (j < num_cols - 1) {
+        if (print_str(fd, " ")) {
+        perror("Error writing to file descriptor");
+        return 1;
+        }
+      }
+    }
+
+    if (print_str(fd, "\n")) {
+      perror("Error writing to file descriptor");
+      return 1;
+    }
+  }
+  return 0;
+}

@@ -1,3 +1,9 @@
+/* 2ª Parte projeto SO 2023/24
+ *
+ * Grupo: 117
+ * Alunos: Pedro Silveira (106642), Raquel Rodrigues (106322)
+ */
+
 #include <limits.h>
 #include <pthread.h>
 #include <stddef.h>
@@ -11,6 +17,7 @@
 #include <sys/stat.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <signal.h>
 
 #include "common/constants.h"
 #include "common/io.h"
@@ -18,28 +25,49 @@
 #include "requests.h"
 #include "prod_cons_queue.h"
 
+static int sig_usr = 0;
 pthread_mutex_t sessions_mutex = PTHREAD_MUTEX_INITIALIZER;
 sem_t semSessions;
-int sessions[MAX_SESSION_COUNT] = {0}; // apagar da main
+int sessions[MAX_SESSION_COUNT] = {0};
+
+void sig_handler(int sig) {
+  if (sig == SIGUSR1) {
+    if (signal(SIGUSR1, sig_handler) == SIG_ERR) {
+      fprintf(stderr, "Error establishing a signal handler\n");
+      exit(EXIT_FAILURE);
+    }
+
+    // flag to indicate the server to print events info.
+    sig_usr = 1;
+  }
+}
 
 void *consumer_thread_fn(void* arg) {
+  // Block SIGINT in this thread
+  sigset_t set;
+  sigemptyset(&set);
+  sigaddset(&set, SIGUSR1);
+
+  if (pthread_sigmask(SIG_BLOCK, &set, NULL) != 0) {
+    fprintf(stderr, "Error with pthread_sigmask\n");
+    return NULL;
+  }
+
   ClientQueue *queue = (ClientQueue*) arg;
 
   while (1) {
     Client new_client = dequeue(queue);
     int quit = 0;
-    int session_id; // alterar session id variaveis duplicadas
+    int session_id;
     int req_pipe;
     int resp_pipe;
 
-    // TODO: generate session_id
-    //pthread_cond_wait(&cond);
     sem_wait(&semSessions);
     for (int i = 0; i < MAX_SESSION_COUNT; i++) {
       
       if (pthread_mutex_lock(&sessions_mutex) != 0) {
         fprintf(stderr, "Error locking sessions mutex\n");
-        //return 1;
+        return NULL;
       }
 
       if (sessions[i] == 0) {
@@ -48,20 +76,20 @@ void *consumer_thread_fn(void* arg) {
 
         if (pthread_mutex_unlock(&sessions_mutex) != 0) {
           fprintf(stderr, "Error unlocking sessions mutex\n");
-          //return 1;
+          return NULL;
         }
         break;
       }
       if (pthread_mutex_unlock(&sessions_mutex) != 0) {
         fprintf(stderr, "Error unlocking sessions mutex\n");
-        //return 1;
+        return NULL;
       }
     }
 
     req_pipe = open(new_client.req_pipe_path, O_RDONLY);
     if (req_pipe == -1) {
       fprintf(stderr, "open failed: %s\n", strerror(errno));
-      exit(EXIT_FAILURE);
+      return NULL;
     }
 
     printf("Server opened request pipe, fd: %d\n", req_pipe);
@@ -97,8 +125,7 @@ void *consumer_thread_fn(void* arg) {
     while (1) {
       char op_buffer;
       ssize_t op_bytes_read = read(req_pipe, &op_buffer, sizeof(char));
-      if (op_bytes_read == 0) {
-        //TODO: clear session_id
+      if (op_bytes_read == 0) { // client unavailable
         if (pthread_mutex_lock(&sessions_mutex) != 0) {
           fprintf(stderr, "Error locking sessions mutex\n");
           //return 1;
@@ -252,6 +279,11 @@ int main(int argc, char* argv[]) {
     return 1;
   }
 
+  if (signal(SIGUSR1, sig_handler) == SIG_ERR) {
+    fprintf(stderr, "Error establishing a signal handler: %s\n", strerror(errno));
+    exit(EXIT_FAILURE);
+  }
+
   //TODO: Initialize server, create worker threads
   ClientQueue client_queue;
   init_queue(&client_queue);
@@ -274,7 +306,7 @@ int main(int argc, char* argv[]) {
   }
 
   // Create register pipe
-  if (mkfifo(pipe_path, 0640) != 0) { // alterar permissoes?
+  if (mkfifo(pipe_path, 0640) != 0) {
     fprintf(stderr, "mkfifo failed: %s\n", strerror(errno));
     exit(EXIT_FAILURE);
   }
@@ -293,14 +325,15 @@ int main(int argc, char* argv[]) {
   
   while (1) {
     //TODO: Read from pipe
-    //char buffer[82];
-    //ssize_t bytes_read = read(reg_server, buffer, 81);
     char op_code;
     ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
 
-    //printf("Bytes_read: %zd op_code: %c\n", bytes_read, op_code);
-
-    if (bytes_read == 0) { // diferente neste caso como mudar?
+    // SIGUSR1 signal was sent
+    if (sig_usr) {
+      print_all_events(STDOUT_FILENO);
+    }
+    
+    if (bytes_read == 0) {
       continue;
       // fprintf(stderr, "register pipe closed\n");
       // exit(EXIT_FAILURE);
@@ -308,11 +341,6 @@ int main(int argc, char* argv[]) {
       fprintf(stderr, "read failed: %s\n", strerror(errno));
       exit(EXIT_FAILURE);
     } else {
-      /*
-      char op_code = buffer[0];
-      char req_pipe_path[40];
-      char resp_pipe_path[40];
-      */
 
       if (op_code != '1') {
         fprintf(stderr, "Operation code must be 1 for setup\n");
@@ -377,158 +405,8 @@ int main(int argc, char* argv[]) {
       strcpy(client.resp_pipe_path, resp_pipe_path);
 
       enqueue(&client_queue, &client);
-
-      // new_client.req_pipe = open(req_pipe_path, O_RDONLY);
-      // if (new_client.req_pipe == -1) {
-      //   fprintf(stderr, "open failed: %s\n", strerror(errno));
-      //   exit(EXIT_FAILURE);
-      // }
-
-      // printf("Server opened request pipe, fd: %d\n", new_client.req_pipe);
-
-      // // Open responses pipe for writing
-      // // This waits for the client to open it for reading
-      // new_client.resp_pipe = open(resp_pipe_path, O_WRONLY);
-      // if (new_client.resp_pipe == -1) {
-      //   fprintf(stderr, "open failed: %s\n", strerror(errno));
-      //   exit(EXIT_FAILURE);
-      // }
-
-      // printf("Server opened responses pipe\n");
-
-      // // TODO: generate session_id
-      // for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-      //   pthread_mutex_lock(&sessions_mutex);
-      //   if (sessions[i] == 0) {
-      //     new_client.session_id = i;
-      //     sessions[i] = 1;
-      //     pthread_mutex_unlock(&sessions_mutex);
-      //     break;
-      //   }
-      //   pthread_mutex_unlock(&sessions_mutex);
-      // }
-
-      // // Respond to the client with the corresponding session id
-      // if (write_int(new_client.resp_pipe, new_client.session_id)) {
-      //   fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
-      //   exit(EXIT_FAILURE); // ver pergunta 100 no piazza
-      // }
     }
-
-    //TODO: Write new client to the producer-consumer buffer
   }
-
-  // int quit = 0;
-  // while (1) {
-  //   char op_buffer;
-  //   ssize_t op_bytes_read = read(new_client.req_pipe, &op_buffer, sizeof(char));
-  //   if (op_bytes_read == 0) {
-  //     //TODO: clear session_id
-  //     quit = 1;
-  //   } else if (op_bytes_read == -1) {
-  //     fprintf(stderr, "Read failed: %s\n", strerror(errno));
-  //     exit(EXIT_FAILURE);
-  //   } else {
-  //     int session_id = 0;
-  //     unsigned int event_id;
-  //     unsigned int *seats = NULL, *ids = NULL;
-  //     size_t num_rows, num_cols, num_seats, num_events, num_rc[2];
-  //     size_t xs[MAX_RESERVATION_SIZE], ys[MAX_RESERVATION_SIZE];
-  //     int response = 0;
-  //     switch (op_buffer) {
-  //       case '1':
-  //         //FIX ME: various clients
-  //       case '2':
-  //         printf("Case 2: QUIT\n");
-  //         //TODO: clear session_id
-  //         read_session_id(new_client.req_pipe, &session_id);
-  //         sessions[session_id] = 0; //mutex?
-  //         quit = 1;
-  //         break;
-
-  //       case '3':
-  //         printf("Case 3: CREATE\n");
-
-  //         read_create_request(new_client.req_pipe, &session_id, &event_id, &num_rows, &num_cols);
-
-  //         if (write_int(new_client.resp_pipe, ems_create(event_id, num_rows, num_cols))) {
-  //           fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //           return 1;
-  //         }  
-  //         break;
-
-  //       case '4':
-  //         printf("Case 4: RESERVE\n");
-
-  //         read_reserve_request(new_client.req_pipe, &session_id, &event_id, &num_seats, xs, ys);
-
-  //         if (write_int(new_client.resp_pipe, ems_reserve(event_id, num_seats, xs, ys))) {
-  //           fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //           return 1;
-  //         }       
-  //         break;
-
-  //       case '5':
-  //         printf("Case 5: SHOW\n");
-
-  //         read_show_request(new_client.req_pipe, &session_id, &event_id);
-
-  //         printf("show | seats address: %p\n", seats);
-
-  //         response = ems_show(event_id, &num_rows, &num_cols, &seats);
-          
-  //         if (response) {
-  //           if (write_int(new_client.resp_pipe, response)) {
-  //             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //             return 1;
-  //           }
-  //         } else {
-  //           num_rc[0] = num_rows;
-  //           num_rc[1] = num_cols;
-  //           printf("show | num_rows: %zu num_cols: %zu seats address: %p\n", num_rc[0], num_rc[1], seats);
-  //           for (size_t i = 0; i < num_rows*num_cols; i++) {
-  //             printf("seats[%zu] = %u\n", i, seats[i]);
-  //           }
-
-  //           if (write_int(new_client.resp_pipe, response) || write_sizet_array(new_client.resp_pipe, num_rc, 2)
-  //               || write_uint_array(new_client.resp_pipe, seats, num_rows*num_cols)) {
-  //             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //             return 1;
-  //           }
-  //         }
-  //         free(seats);
-  //         break;
-          
-  //       case '6':
-  //         printf("Case 6: LIST\n");
-
-  //         read_session_id(new_client.req_pipe, &session_id);
-          
-  //         response = ems_list_events(&num_events, &ids);
-
-  //         if (response) {
-  //           if (write_int(new_client.resp_pipe, response)) {
-  //             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //             return 1;
-  //           } 
-  //         } else {
-  //           if (write_int(new_client.resp_pipe, response) || write_sizet(new_client.resp_pipe, num_events) 
-  //               || write_uint_array(new_client.resp_pipe, ids, num_events)) {
-  //             fprintf(stderr, "Error writing to responses pipe: %s\n", strerror(errno));
-  //             return 1;
-  //           }
-
-  //         }
-  //         free(ids);
-  //         break;
-  //     }
-  //   }
-  //   if (quit)
-  //     break;
-  // }
-  // close(new_client.req_pipe);
-  // close(new_client.resp_pipe);
-
 
   for (int i = 0; i < MAX_SESSION_COUNT; i++) {
     pthread_join(tid[i], NULL); // erro

@@ -26,12 +26,14 @@ int write_str(int fd, const char *str, size_t length);
 
 int write_int(int fd, int value);
 
+int write_uint(int fd, unsigned int value);
+
 int write_sizet(int fd, size_t value);
 
 int write_uint_array(int fd, unsigned int *array, size_t length);
 
 int write_sizet_array(int fd, size_t *array, size_t length);
 
-int write_uint(int fd, unsigned int value);
+int print_event_info(int fd, size_t num_rows, size_t num_cols, unsigned int *seats);
 
 #endif  // COMMON_IO_H

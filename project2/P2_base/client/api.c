@@ -285,31 +285,33 @@ int ems_show(int out_fd, unsigned int event_id) {
     return 1;
   }
 
-  for (size_t i = 0; i < num_rows; i++) {
-    for (size_t j = 0; j < num_cols; j++) {
-      char buffer[16];
-      sprintf(buffer, "%u", seats[i*num_cols + j]);
+  print_event_info(out_fd, num_rows, num_cols, seats);
 
-      printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
+  // for (size_t i = 0; i < num_rows; i++) {
+  //   for (size_t j = 0; j < num_cols; j++) {
+  //     char buffer[16];
+  //     sprintf(buffer, "%u", seats[i*num_cols + j]);
 
-      if (print_str(out_fd, buffer)) {
-        perror("Error writing to file descriptor");
-        return 1;
-      }
+  //     printf("seats[%zu] = %u\n", i*num_cols + j, seats[i*num_cols + j]);
 
-      if (j < num_cols - 1) {
-        if (print_str(out_fd, " ")) {
-        perror("Error writing to file descriptor");
-        return 1;
-        }
-      }
-    }
+  //     if (print_str(out_fd, buffer)) {
+  //       perror("Error writing to file descriptor");
+  //       return 1;
+  //     }
 
-    if (print_str(out_fd, "\n")) {
-      perror("Error writing to file descriptor");
-      return 1;
-    }
-  }
+  //     if (j < num_cols - 1) {
+  //       if (print_str(out_fd, " ")) {
+  //       perror("Error writing to file descriptor");
+  //       return 1;
+  //       }
+  //     }
+  //   }
+
+  //   if (print_str(out_fd, "\n")) {
+  //     perror("Error writing to file descriptor");
+  //     return 1;
+  //   }
+  // }
 
   return 0;
 }

@@ -290,3 +290,66 @@ int ems_list_events(size_t *num_events, unsigned int **ids) {
   pthread_rwlock_unlock(&event_list->rwl);
   return 0;
 }
+
+int print_all_events(int out_fd) {
+  if (event_list == NULL) {
+    fprintf(stderr, "EMS state must be initialized\n");
+    return 1;
+  }
+
+  if (pthread_rwlock_rdlock(&event_list->rwl) != 0) {
+    fprintf(stderr, "Error locking list rwl\n");
+    return 1;
+  }
+
+  struct ListNode* to = event_list->tail;
+  struct ListNode* current = event_list->head;
+
+  if (current == NULL) {
+    char buff[] = "No events\n";
+    if (print_str(out_fd, buff)) {
+      perror("Error writing to file descriptor");
+      pthread_rwlock_unlock(&event_list->rwl);
+      return 1;
+    }
+
+    pthread_rwlock_unlock(&event_list->rwl);
+    return 0;
+  }
+
+  while (1) {
+    char buff[] = "Event: ";
+    if (print_str(out_fd, buff)) {
+      perror("Error writing to file descriptor");
+      pthread_rwlock_unlock(&event_list->rwl);
+      return 1;
+    }
+
+    char id[16];
+    unsigned int current_id = (current->event)->id;
+    size_t num_rows, num_cols;
+    unsigned int *seats = NULL;
+
+    sprintf(id, "%u\n", current_id);
+    if (print_str(out_fd, id)) {
+      perror("Error writing to file descriptor");
+      pthread_rwlock_unlock(&event_list->rwl);
+      return 1;
+    }
+
+    if (ems_show(current_id, &num_rows, &num_cols, &seats)) {
+      fprintf(stderr, "Show failed\n");
+    }
+
+    print_event_info(out_fd, num_rows, num_cols, seats);
+
+    if (current == to) {
+      break;
+    }
+
+    current = current->next;
+  }
+
+  pthread_rwlock_unlock(&event_list->rwl);
+  return 0;
+}
