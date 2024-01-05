@@ -107,7 +107,7 @@ int write_uint(int fd, unsigned int value) {
 
   if (written == -1) {
     return 1;
-  } // if (written != sizeof(unsigned int))
+  }
   return 0;
 }
 

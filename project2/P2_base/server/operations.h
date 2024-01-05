@@ -40,6 +40,9 @@ int ems_show(unsigned int event_id, size_t *num_rows, size_t *num_cols, unsigned
 /// @return 0 if the events were printed successfully, 1 otherwise.
 int ems_list_events(size_t *num_events, unsigned int **ids);
 
+/// Prints all the events and their seats.
+/// @param out_fd The file descriptor to write to.
+/// @return 0 if the events were printed successfully, 1 otherwise.
 int print_all_events(int out_fd);
 
 #endif  // SERVER_OPERATIONS_H

@@ -149,9 +149,13 @@ void *consumer_thread_fn(void* arg) {
         switch (op_buffer) {
           case '2':
             printf("Case 2: QUIT\n");
+<<<<<<< Updated upstream
             if (read_session_id(req_pipe, &resp_session_id)) {
               break;
             }
+=======
+            read_session_id(req_pipe, &resp_session_id);
+>>>>>>> Stashed changes
             
             if (pthread_mutex_lock(&sessions_mutex) != 0) {
               fprintf(stderr, "Error locking sessions mutex\n");
