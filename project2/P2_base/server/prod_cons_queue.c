@@ -47,7 +47,7 @@ Client dequeue(ClientQueue *queue) {
     // Wait for a command to be enqueued
     pthread_cond_wait(&queue->cond, &queue->mutex);
   }
-  Client client;// = {.cmd = CMD_EMPTY};
+  Client client;
   
   if (queue->head != NULL) {
     QueueNode *temp = queue->head;

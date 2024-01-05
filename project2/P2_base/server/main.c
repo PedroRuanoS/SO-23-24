@@ -62,7 +62,6 @@ void *consumer_thread_fn(void* arg) {
     int req_pipe;
     int resp_pipe;
 
-    sem_wait(&semSessions);
     for (int i = 0; i < MAX_SESSION_COUNT; i++) {
       
       if (pthread_mutex_lock(&sessions_mutex) != 0) {
@@ -324,6 +323,7 @@ int main(int argc, char* argv[]) {
   sem_init(&semSessions, 0, MAX_SESSION_COUNT);
   
   while (1) {
+    sem_wait(&semSessions);
     //TODO: Read from pipe
     char op_code;
     ssize_t bytes_read = read(reg_server, &op_code, sizeof(char));
