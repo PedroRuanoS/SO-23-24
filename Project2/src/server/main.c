@@ -90,7 +90,7 @@ void *consumer_thread_fn(void* arg) {
       }
     }
 
-    req_pipe = open(new_client.req_pipe_path, O_RDWR);
+    req_pipe = open(new_client.req_pipe_path, O_RDONLY);
     if (req_pipe == -1) {
       fprintf(stderr, "Open failed: %s\n", strerror(errno));
       return NULL;
@@ -104,18 +104,8 @@ void *consumer_thread_fn(void* arg) {
       exit(EXIT_FAILURE);
     }
 
-    for (int i = 0; i < MAX_SESSION_COUNT; i++) {
-      pthread_mutex_lock(&sessions_mutex);
-      if (sessions[i] == 0) {
-        session_id = i;
-        sessions[i] = 1;
-        pthread_mutex_unlock(&sessions_mutex);
-        break;
-      }
-      pthread_mutex_unlock(&sessions_mutex);
-    }
-
-    // Respond to the client with the corresponding session id
+    // Respond to the client 
+    with the corresponding session id
     if (write_int(resp_pipe, session_id)) {
       fprintf(stderr, "Error writing to pipe: %s\n", strerror(errno));
       exit(EXIT_FAILURE); // ver pergunta 100 no piazza

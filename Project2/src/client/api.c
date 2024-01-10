@@ -91,8 +91,7 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
   }
 
   // Obtain the response from the server with the session id
-  char buffer[sizeof(int) + 1];
-  ssize_t ret = read(resp_pipe, buffer, sizeof(int));
+  ssize_t ret = read(resp_pipe, &session_id, sizeof(int));
 
   if (ret == 0) {
     fprintf(stderr, "responses pipe closed\n");
@@ -101,8 +100,6 @@ int ems_setup(char const* req_pipe_path, char const* resp_pipe_path, char const*
     fprintf(stderr, "Error reading from responses pipe: %s\n", strerror(errno));
     return 1;
   }
-
-  memcpy(&session_id, &buffer[0], sizeof(int)); // store the session id
 
   return 0;
 }
